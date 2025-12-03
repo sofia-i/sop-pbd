@@ -32,9 +32,13 @@
 
 #include <SOP/SOP_Node.h>
 #include <SOP/SOP_NodeVerb.h>
+#include <UT/UT_DSOVersion.h>
+#include <UT/UT_StringHolder.h>
 #include <UT/UT_IStream.h>
 
 namespace HDK_PBD {
+
+using namespace UT::Literal;
 
 extern const UT_StringHolder parm_iters;
 extern const UT_StringHolder parm_doColl;
@@ -54,6 +58,24 @@ extern const UT_StringHolder dist_type;
 extern const UT_StringHolder coll_type;
 extern const UT_StringHolder geo_propp;
 
+class SOP_ProjectConstraintsVerb : public SOP_NodeVerb
+{
+public:
+    SOP_NodeParms *allocParms() const override { return new SOP_ProjectConstraintsParms(); }
+    UT_StringHolder name() const override { return theSOPTypeName; }
+
+    CookMode cookMode(const SOP_NodeParms *parms) const override { return COOK_GENERIC; }
+
+    void cook(const CookParms &cookparms) const override;
+
+    static const UT_StringHolder theSOPTypeName;
+    static const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> theVerb;
+    // static const char *const theDsFile;
+};
+
+const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);
+const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> SOP_ProjectConstraintsVerb::theVerb;
+
 class SOP_ProjectConstraints : public SOP_Node
 {
 public:
@@ -65,6 +87,8 @@ public:
 							    OP_Operator *);
 
 protected:
+    const SOP_NodeVerb *cookVerb() const override;
+
     const char         *inputLabel(unsigned idx) const override;
     OP_ERROR            cookMySop(OP_Context &context) override;
 

@@ -36,9 +36,6 @@
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_TemplateBuilder.h>
 
-#include <UT/UT_DSOVersion.h>
-#include <UT/UT_StringStream.h>
-#include <UT/UT_StringHolder.h>
 #include <UT/UT_Interrupt.h>
 
 using namespace UT::Literal;
@@ -81,6 +78,7 @@ static const char *theDsFile = R"THEDSFILE(
     name    parameters
     parm {
         name    "iters"     // Internal parameter name
+        cppname "Iterations"
         label   "Iterations" // Descriptive paramter name
         type    integer
         default { "1" }
@@ -88,24 +86,28 @@ static const char *theDsFile = R"THEDSFILE(
     }
     parm {
         name    "doColl"
+        cppname "DoCollision"
         label   "Do Collisions"
         type    toggle
         default { "1" }
     }
     parm {
         name    "doAttach"
+        cppname "DoAttachment"
         label   "Do Attachments"
         type    toggle
         default { "1" }
     }
     parm {
         name    "doDist"
+        cppname "DoDistance"
         label   "Do Distance"
         type    toggle
         default { "1" }
     }
     parm {
         name    "iterType"
+        cppname "IterationType"
         label   "Iteration Type"
         type    ordinal
         default { "0" }
@@ -173,6 +175,12 @@ static const char *theDsFile = R"THEDSFILE(
 }
 )THEDSFILE";
 
+const SOP_NodeVerb *
+SOP_ProjectConstraints::cookVerb() const 
+{
+    return SOP_ProjectConstraintsVerb::theVerb.get();
+}
+
 PRM_Template *
 SOP_ProjectConstraints::buildTemplates()
 {
@@ -190,6 +198,8 @@ SOP_ProjectConstraints::myConstructor(OP_Network *net, const char *name, OP_Oper
 SOP_ProjectConstraints::SOP_ProjectConstraints(OP_Network *net, const char *name, OP_Operator *op)
     : SOP_Node(net, name, op)
 {
+    // all verb SOPs must manage data IDs
+    mySopFlags.setManagesDataIDs(true);
 }
 
 SOP_ProjectConstraints::~SOP_ProjectConstraints() {}
@@ -197,57 +207,80 @@ SOP_ProjectConstraints::~SOP_ProjectConstraints() {}
 OP_ERROR
 SOP_ProjectConstraints::cookMySop(OP_Context &context)
 {
+    return cookMyselfAsVerb(context);
+}
+
+void
+SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const 
+{
+    auto &&sopparms = cookparms.parms<SOP_ProjectConstraintsParms>();
+
     // Allow for interruption during cooking
     UT_AutoInterrupt progress("Projecting constraints");
 
-    float t = context.getTime();
+    float t = cookparms.getCookTime();
     std::cerr << "frame " << t << std::endl;
 
-    // We must lock our inputs before we try to access their geometry.
-    // OP_AutoLockInputs will automatically unlock our inputs when we return.
-    // NOTE: Don't call unlockInputs yourself when using this!
-    OP_AutoLockInputs inputs(this);
-    if (inputs.lock(context) >= UT_ERROR_ABORT)
-        return error();
+    // // We must lock our inputs before we try to access their geometry.
+    // // OP_AutoLockInputs will automatically unlock our inputs when we return.
+    // // NOTE: Don't call unlockInputs yourself when using this!
+    // OP_AutoLockInputs inputs(this);
+    // if (inputs.lock(context) >= UT_ERROR_ABORT)
+    //     return error();
 
-    const GU_Detail *constraints = inputGeo(1, context);
-    const GU_Detail *collision = inputGeo(2, context);
+    // output detail
+    GEO_Detail *output_geo = cookparms.gdh().gdpNC();
+    UT_ASSERT(output_geo);
+
+    // input detail
+    const GEO_Detail *const simgeo_input = cookparms.inputGeo(0);
+    UT_ASSERT(simgeo_input);
 
     // Duplicate incoming geometry
-    duplicateSource(0, context);
+    // duplicateSource(0, context);
+
+    // Copy input geometry into output
+    output_geo->replaceWith(*simgeo_input);
+
+    const GU_Detail *constraints = cookparms.inputGeo(1);
+    const GU_Detail *collision = cookparms.inputGeo(2);
+
+    UT_ASSERT(constraints);
+    UT_ASSERT(collision);
+
+    // if constraints are empty then continue without doing anything
+    if (constraints->getNumPoints() == 0)
+    {
+        cookparms.sopAddWarning(SOP_MESSAGE, "Constraints empty");
+        return;
+    }
 
     // Get attribute names from parameters
-    UT_String typeattr;
-    UT_String targetattr, target2attr;
-    UT_String hitpattr;
-    UT_String hitnattr;
-    UT_String distattr;
-    UT_String invmassattr;
+    UT_StringHolder type_attr        = sopparms.getTypeAttributeName();
+    UT_StringHolder target_attr      = sopparms.getTargetAttributeName();
+    UT_StringHolder target2_attr     = sopparms.getTarget2AttributeName();
+    UT_StringHolder hitP_attr        = sopparms.getHitPAttributeName();
+    UT_StringHolder hitN_attr        = sopparms.getHitNAttributeName();
+    UT_StringHolder dist_attr        = sopparms.getDistanceAttributeName();
+    UT_StringHolder invMass_attr     = sopparms.getInvMassAttributeName();
 
-    SOP_ProjectConstraintsEnums::Itertype itertypeattr;
-
-    evalString(typeattr, parm_typeattr, 0, context.getTime());
-    evalString(targetattr, parm_targetattr, 0, context.getTime());
-    evalString(target2attr, parm_target2attr, 0, context.getTime());
-    evalString(hitpattr, parm_hitpattr, 0, context.getTime());
-    evalString(hitnattr, parm_hitnattr, 0, context.getTime());
-    evalString(distattr, parm_distattr, 0, context.getTime());
-    evalString(invmassattr, parm_invmassattr, 0, context.getTime());
+    SOP_ProjectConstraintsEnums::IterationType iterType_attr = sopparms.getIterationType();
 
     // Validate inputs - look for required properties for constraints
-    GA_ROHandleS type(constraints, GA_ATTRIB_POINT, typeattr);
+    GA_ROHandleS type(constraints, GA_ATTRIB_POINT, type_attr);
     if(!type.isValid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid type handle" << std::endl;
-        addError(SOP_MESSAGE, strcat(strcat("Constraints missing type property with name'", + typeattr.c_str()), "'."));
-        return error();
+        cookparms.sopAddError(SOP_MESSAGE, strcat(strcat("Constraints missing type property with name'", + type_attr.c_str()), "'."));
+        return;
     }
 
-    GA_RWHandleV3 proppHandle(gdp, GA_ATTRIB_POINT, geo_propp);
+    GA_RWHandleV3 proppHandle(output_geo, GA_ATTRIB_POINT, geo_propp);
     if(proppHandle.isInvalid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propp handle" << std::endl;
-        addError(SOP_MESSAGE, "Sim geo missing 'propp' property");
-        return error();
+        cookparms.sopAddError(SOP_MESSAGE, "Sim geo missing 'propp' property");
+        return;
     }
+    proppHandle.bumpDataId();
 
     std::map<GA_Offset, UT_Vector3> ppositions;
     std::map<GA_Offset, UT_Vector3> old_ppositions;
@@ -255,34 +288,39 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
     // Fill in the proposed positions
     {
         GA_Offset ptoff;
-        GA_FOR_ALL_PTOFF(gdp, ptoff)
+        GA_FOR_ALL_PTOFF(simgeo_input, ptoff)
         {
             ppositions[ptoff] = proppHandle.get(ptoff);
             old_ppositions[ptoff] = proppHandle.get(ptoff);
         }
     }
     
-    GA_ROHandleD invMassHandle(gdp, GA_ATTRIB_POINT, invmassattr);
-    GA_ROHandleI targetHandle(constraints, GA_ATTRIB_POINT, targetattr);
-    GA_ROHandleI target2Handle(constraints, GA_ATTRIB_POINT, target2attr);
-    GA_ROHandleV3 hitPHandle(constraints, GA_ATTRIB_POINT, hitpattr);
-    GA_ROHandleV3 hitNHandle(constraints, GA_ATTRIB_POINT, hitnattr);
-    GA_ROHandleD distHandle(constraints, GA_ATTRIB_POINT, distattr);
+    GA_ROHandleD invMassHandle(simgeo_input, GA_ATTRIB_POINT, invMass_attr);
+    GA_ROHandleI targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
+    GA_ROHandleI target2Handle(constraints, GA_ATTRIB_POINT, target2_attr);
+    GA_ROHandleV3 hitPHandle(constraints, GA_ATTRIB_POINT, hitP_attr);
+    GA_ROHandleV3 hitNHandle(constraints, GA_ATTRIB_POINT, hitN_attr);
+    GA_ROHandleD distHandle(constraints, GA_ATTRIB_POINT, dist_attr);
 
-    bool doAttachment = evalInt(parm_doAttach, 0, context.getTime());
-    bool doDist = evalInt(parm_doDist, 0, context.getTime());
-    bool doColl = evalInt(parm_doColl, 0, context.getTime());
+    bool doAttachment = sopparms.getDoAttachment();
+    bool doDist = sopparms.getDoDistance();
+    bool doColl = sopparms.getDoCollision();
+
+    // bool doAttachment = evalInt(parm_doAttach, 0, context.getTime());
+    // bool doDist = evalInt(parm_doDist, 0, context.getTime());
+    // bool doColl = evalInt(parm_doColl, 0, context.getTime());
 
     // Iterate over each constraint
-    int nIterations = evalInt(parm_iters, 0, context.getTime());
+    int nIterations = sopparms.getIterations();
+    // int nIterations = evalInt(parm_iters, 0, context.getTime());
     for (int i = 0; i < nIterations; ++i) 
     {
         GA_Offset constraint_ptoff;
         GA_FOR_ALL_PTOFF(constraints, constraint_ptoff)
         {
             if (progress.wasInterrupted()) {
-                addError(SOP_MESSAGE, "User Interrupted");
-                return error();
+                cookparms.sopAddError(SOP_MESSAGE, "User Interrupted");
+                return;
             }
             const char *type_value = type.get(constraint_ptoff);
             // printf("type: %s\n", type_value);
@@ -295,7 +333,7 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
                 }
                 else {
                     int target = targetHandle.get(constraint_ptoff);
-                    int targetPtoff = gdp->pointOffset(target);
+                    int targetPtoff = output_geo->pointOffset(target);
                     // std::cerr << "checkpoint 6a2" << std::endl;
                     UT_Vector3 location = constraints->getPos3(constraint_ptoff);
                     UT_Vector3 propp = ppositions[targetPtoff];
@@ -311,24 +349,24 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
                 if (target2Handle.isInvalid()) {
                     std::cerr << "invalid target 2 handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid target2 handle";
-                    addWarning(SOP_MESSAGE, message);
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else if (distHandle.isInvalid()) {
                     std::cerr << "invalid dist handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid dist handle";
-                    addWarning(SOP_MESSAGE, message);
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else if (invMassHandle.isInvalid()) {
                     std::cerr << "invalid inv mass handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid inv mass handle";
-                    addWarning(SOP_MESSAGE, message);
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else {
                     int target = targetHandle.get(constraint_ptoff);
                     int target2 = target2Handle.get(constraint_ptoff);
 
-                    int targetPtoff = gdp->pointOffset(target);
-                    int target2Ptoff = gdp->pointOffset(target2);
+                    int targetPtoff = output_geo->pointOffset(target);
+                    int target2Ptoff = output_geo->pointOffset(target2);
 
                     float dist = distHandle.get(constraint_ptoff);
 
@@ -356,16 +394,16 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
                 // find the point it applies to
                 // std::cerr << "checkpoint 6c1" << std::endl;
                 int target = targetHandle.get(constraint_ptoff);
-                int targetPtoff = gdp->pointOffset(target);
+                int targetPtoff = output_geo->pointOffset(target);
                 if (hitPHandle.isInvalid()) {
                     std::cerr << "invalid hitP handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid hitP handle";
-                    addWarning(SOP_MESSAGE, message);
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else if (hitNHandle.isInvalid()) {
                     std::cerr << "invalid hitN handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid hitN handle";
-                    addWarning(SOP_MESSAGE, message);
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else {
                     UT_Vector3 hit_p = hitPHandle.get(constraint_ptoff);
@@ -385,7 +423,7 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
     // Apply position corrections
     {
         GA_Offset ptoff;
-        GA_FOR_ALL_PTOFF(gdp, ptoff)
+        GA_FOR_ALL_PTOFF(output_geo, ptoff)
         {
             UT_Vector3 corr = ppositions[ptoff] - old_ppositions[ptoff];
             // std::cerr << "adjust point with offset " << ptoff << " by " << corr << std::endl;
@@ -394,7 +432,7 @@ SOP_ProjectConstraints::cookMySop(OP_Context &context)
         }
     }
 
-    return error();
+    return;
 }
 
 const char *
