@@ -251,7 +251,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder dist_attr        = sopparms.getDistanceAttributeName();
     UT_StringHolder invMass_attr     = sopparms.getInvMassAttributeName();
 
-    SOP_ProjectConstraintsEnums::IterationType iterType_attr = sopparms.getIterationType();
+    SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
     // Validate inputs - look for required properties for constraints
     GA_ROHandleS type(constraints, GA_ATTRIB_POINT, type_attr);
@@ -271,8 +271,19 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     }
     proppHandle.bumpDataId();
 
+    GA_RWHandleI hasCollidedHandle(output_geo, GA_ATTRIB_POINT, collided_attr);
+    GA_RWHandleV3 collisionNormalHandle(output_geo, GA_ATTRIB_POINT, cN_attr);
+    if (hasCollidedHandle.isValid()) {
+        hasCollidedHandle.bumpDataId();
+    }
+    if (collisionNormalHandle.isValid()) {
+        collisionNormalHandle.bumpDataId();
+    }
+
     std::map<GA_Offset, UT_Vector3> ppositions;
     std::map<GA_Offset, UT_Vector3> old_ppositions;
+    std::map<GA_Offset, UT_Vector3> corrections;
+    std::map<GA_Offset, int> nCorrections;
 
     // Fill in the proposed positions
     {
@@ -281,6 +292,8 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         {
             ppositions[ptoff] = proppHandle.get(ptoff);
             old_ppositions[ptoff] = proppHandle.get(ptoff);
+            corrections[ptoff] = UT_Vector3{0., 0., 0.};
+            nCorrections[ptoff] = 0.;
         }
     }
     
@@ -328,7 +341,16 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
                     UT_Vector3 correction = location - propp;
 
-                    ppositions[targetPtoff] += correction;
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            ppositions[targetPtoff] += correction;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            corrections[targetPtoff] += correction;
+                            nCorrections[targetPtoff] += 1;
+                        }
+                    }
                 }
             }
             else if (doDist && strcmp(type_value, dist_type) == 0)  // distance constraint
@@ -373,8 +395,19 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 correction1 = -diff * w1 * s;
                     UT_Vector3 correction2 = diff * w2 * s;
 
-                    ppositions[targetPtoff] += correction1;
-                    ppositions[target2Ptoff] += correction2;
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            ppositions[targetPtoff] += correction1;
+                            ppositions[target2Ptoff] += correction2;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            corrections[targetPtoff] += correction1;
+                            corrections[target2Ptoff] += correction2;
+                            nCorrections[targetPtoff] += 1;
+                            nCorrections[target2Ptoff] += 1;
+                        }
+                    }
                 }
             }
             else if (doColl && strcmp(type_value, coll_type) == 0)  // collision constraint
@@ -400,14 +433,31 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 propp = ppositions[targetPtoff];
                     UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
 
-                    ppositions[targetPtoff] += correction;
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            ppositions[targetPtoff] += correction;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            corrections[targetPtoff] += correction;
+                            nCorrections[targetPtoff] += 1;
+                        }
+                    }
                 }
             }
         }
-    }
-    
 
-    // std::cerr << "checkpoint 7" << std::endl;
+        if (iterType == SOP_ProjectConstraintsEnums::IterationType::JACOBI) {
+            // need to average the corrections
+            GA_Offset ptoff;
+            GA_FOR_ALL_PTOFF(output_geo, ptoff) 
+            {
+                UT_Vector3 newPpos = ppositions[ptoff] + (1. / float(nCorrections[ptoff])) * corrections[ptoff];
+                proppHandle.set(ptoff, newPpos);
+            }
+        }
+    }
+
     // Apply position corrections
     {
         GA_Offset ptoff;
