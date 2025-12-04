@@ -40,7 +40,6 @@
 
 using namespace UT::Literal;
 using namespace HDK_PBD;
-// using namespace HDK_Sample;
 
 void
 newSopOperator(OP_OperatorTable *table)
@@ -58,7 +57,6 @@ newSopOperator(OP_OperatorTable *table)
 const UT_StringHolder HDK_PBD::attachment_type = "attachment";
 const UT_StringHolder HDK_PBD::dist_type = "dist";
 const UT_StringHolder HDK_PBD::coll_type = "collision";
-const UT_StringHolder HDK_PBD::geo_propp = "propp";
 
 static const char *theDsFile = R"THEDSFILE(
 {
@@ -109,68 +107,89 @@ static const char *theDsFile = R"THEDSFILE(
         grouptag    { "group_type" "collapsible" }
         parmtag     { "group_default" "1" }
 
-        parm {
-            name    "type_attr"
-            cppname "TypeAttributeName"
-            label   "Type Attribute Name"
-            type    string
-            default { "type" }
+        groupsimple {
+            name        "constr_prop_name_folder"
+            label       "Constraint Attribute Names"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "type_attr"
+                cppname "TypeAttributeName"
+                label   "Type Attribute Name"
+                type    string
+                default { "type" }
+            }
+            parm {
+                name    "target_attr"
+                cppname "TargetAttributeName"
+                label   "Target Attribute Name"
+                type    string
+                default { "target" }
+            }
+            parm {
+                name    "target2_attr"
+                cppname "Target2AttributeName"
+                label   "Target 2 Attribute Name"
+                type    string
+                default { "target2" }
+            }
+            parm {
+                name    "hitp_attr"
+                cppname "HitPAttributeName"
+                label   "Hit P Attribute Name"
+                type    string
+                default { "hitp" }
+            }
+            parm {
+                name    "hitn_attr"
+                cppname "HitNAttributeName"
+                label   "Hit N Attribute Name"
+                type    string
+                default { "hitn" }
+            }
+            parm {
+                name    "dist_attr"
+                cppname "DistanceAttributeName"
+                label   "Distance Attribute Name"
+                type    string
+                default { "dist" }
+            }
         }
-        parm {
-            name    "target_attr"
-            cppname "TargetAttributeName"
-            label   "Target Attribute Name"
-            type    string
-            default { "target" }
-        }
-        parm {
-            name    "target2_attr"
-            cppname "Target2AttributeName"
-            label   "Target 2 Attribute Name"
-            type    string
-            default { "target2" }
-        }
-        parm {
-            name    "hitp_attr"
-            cppname "HitPAttributeName"
-            label   "Hit P Attribute Name"
-            type    string
-            default { "hitp" }
-        }
-        parm {
-            name    "hitn_attr"
-            cppname "HitNAttributeName"
-            label   "Hit N Attribute Name"
-            type    string
-            default { "hitn" }
-        }
-        parm {
-            name    "dist_attr"
-            cppname "DistanceAttributeName"
-            label   "Distance Attribute Name"
-            type    string
-            default { "dist" }
-        }
-        parm {
-            name    "invMass_attr"
-            cppname "InvMassAttributeName"
-            label   "Inv Mass Attribute Name"
-            type    string
-            default { "invMass" }
-        }
-        parm {
-            name    "collided_attr"
-            cppname "HasCollidedAttributeName"
-            label   "Has Collided Attribute Name"
-            type    string
-            default { "collided" }
-        }
-        parm {
-            name    "cN_attr"
-            cppname "CollisionNormalAttributeName"
-            label   "Collision Normal Attribute Name"
-            type    string
-            default { "cN" }
+        groupsimple {
+            name        "simgeo_prop_name_folder"
+            label       "Sim Geo Attribute Names"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "invMass_attr"
+                cppname "InvMassAttributeName"
+                label   "Inv Mass Attribute Name"
+                type    string
+                default { "invMass" }
+            }
+            parm {
+                name    "propp_attr"
+                cppname "ProposedPositionAttributeName"
+                label   "Proposed Position Attribute Name"
+                type    string
+                default { "propp" }
+            }
+            parm {
+                name    "collided_attr"
+                cppname "HasCollidedAttributeName"
+                label   "Has Collided Attribute Name"
+                type    string
+                default { "collided" }
+            }
+            parm {
+                name    "cN_attr"
+                cppname "CollisionNormalAttributeName"
+                label   "Collision Normal Attribute Name"
+                type    string
+                default { "cN" }
+            }
         }
     }
 }
@@ -222,23 +241,15 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     float t = cookparms.getCookTime();
     std::cerr << "frame " << t << std::endl;
 
-    // // We must lock our inputs before we try to access their geometry.
-    // // OP_AutoLockInputs will automatically unlock our inputs when we return.
-    // // NOTE: Don't call unlockInputs yourself when using this!
-    // OP_AutoLockInputs inputs(this);
-    // if (inputs.lock(context) >= UT_ERROR_ABORT)
-    //     return error();
+    // TODO: lock inputs? Unclear if OP_AutoLockInputs is applicable here
 
-    // output detail
+    // Output detail
     GEO_Detail *output_geo = cookparms.gdh().gdpNC();
     UT_ASSERT(output_geo);
 
-    // input detail
+    // Input detail
     const GEO_Detail *const simgeo_input = cookparms.inputGeo(0);
     UT_ASSERT(simgeo_input);
-
-    // Duplicate incoming geometry
-    // duplicateSource(0, context);
 
     // Copy input geometry into output
     output_geo->replaceWith(*simgeo_input);
@@ -249,9 +260,8 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_ASSERT(constraints);
     UT_ASSERT(collision);
 
-    // if constraints are empty then continue without doing anything
-    if (constraints->getNumPoints() == 0)
-    {
+    // If constraints are empty, then return without doing anything
+    if (constraints->getNumPoints() == 0) {
         cookparms.sopAddWarning(SOP_MESSAGE, "Constraints empty");
         return;
     }
@@ -266,6 +276,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder invMass_attr     = sopparms.getInvMassAttributeName();
     UT_StringHolder collided_attr    = sopparms.getHasCollidedAttributeName();
     UT_StringHolder cN_attr          = sopparms.getCollisionNormalAttributeName();
+    UT_StringHolder propp_attr       = sopparms.getProposedPositionAttributeName();
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
@@ -279,10 +290,12 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
 
-    GA_RWHandleV3 proppHandle(output_geo, GA_ATTRIB_POINT, geo_propp);
+    GA_RWHandleV3 proppHandle(output_geo, GA_ATTRIB_POINT, propp_attr);
     if(proppHandle.isInvalid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propp handle" << std::endl;
-        cookparms.sopAddError(SOP_MESSAGE, "Sim geo missing 'propp' property");
+        char buffer[100];
+        snprintf(buffer, 100, "Sim geo missing proposed position property named '%s'.", propp_attr.c_str());
+        cookparms.sopAddError(SOP_MESSAGE, buffer);
         return;
     }
     proppHandle.bumpDataId();
@@ -324,10 +337,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     bool doDist = sopparms.getDoDistance();
     bool doColl = sopparms.getDoCollision();
 
-    // bool doAttachment = evalInt(parm_doAttach, 0, context.getTime());
-    // bool doDist = evalInt(parm_doDist, 0, context.getTime());
-    // bool doColl = evalInt(parm_doColl, 0, context.getTime());
-
     // Iterate over each constraint
     int nIterations = sopparms.getIterations();
     for (int i = 0; i < nIterations; ++i) 
@@ -340,38 +349,34 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 return;
             }
             const char *type_value = type.get(constraint_ptoff);
-            // printf("type: %s\n", type_value);
 
-            if (doAttachment && strcmp(type_value, attachment_type) == 0)  // attachment constraint
+            // Attachment Constraint
+            if (doAttachment && strcmp(type_value, attachment_type) == 0)
             {
-                // std::cerr << "checkpoint 6a1" << std::endl;
-                if (!targetHandle.isValid()) {
-                    std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid target handle" << std::endl;
-                }
-                else {
-                    int target = targetHandle.get(constraint_ptoff);
-                    int targetPtoff = output_geo->pointOffset(target);
-                    // std::cerr << "checkpoint 6a2" << std::endl;
-                    UT_Vector3 location = constraints->getPos3(constraint_ptoff);
-                    UT_Vector3 propp = ppositions[targetPtoff];
+                int target = targetHandle.get(constraint_ptoff);
+                int targetPtoff = output_geo->pointOffset(target);
 
-                    UT_Vector3 correction = location - propp;
+                // Calculate constraint correction
+                UT_Vector3 location = constraints->getPos3(constraint_ptoff);
+                UT_Vector3 propp = ppositions[targetPtoff];
 
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            ppositions[targetPtoff] += correction;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            corrections[targetPtoff] += correction;
-                            nCorrections[targetPtoff] += 1;
-                        }
+                UT_Vector3 correction = location - propp;
+
+                // Apply constraint correction
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        ppositions[targetPtoff] += correction;
+                        break;
+                    }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        corrections[targetPtoff] += correction;
+                        nCorrections[targetPtoff] += 1;
                     }
                 }
             }
-            else if (doDist && strcmp(type_value, dist_type) == 0)  // distance constraint
+            // Distance Constraint
+            else if (doDist && strcmp(type_value, dist_type) == 0)
             {
-                // std::cerr << "checkpoint 6b1" << std::endl;
                 if (target2Handle.isInvalid()) {
                     std::cerr << "invalid target 2 handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid target2 handle";
@@ -394,6 +399,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     int targetPtoff = output_geo->pointOffset(target);
                     int target2Ptoff = output_geo->pointOffset(target2);
 
+                    // Calculate constraint corrections
                     float dist = distHandle.get(constraint_ptoff);
 
                     UT_Vector3 p1 = ppositions[targetPtoff];
@@ -411,6 +417,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 correction1 = -diff * w1 * s;
                     UT_Vector3 correction2 = diff * w2 * s;
 
+                    // Apply constraint corrections
                     switch (iterType) {
                         case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
                             ppositions[targetPtoff] += correction1;
@@ -426,10 +433,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     }
                 }
             }
-            else if (doColl && strcmp(type_value, coll_type) == 0)  // collision constraint
+            // Collision Constraint
+            else if (doColl && strcmp(type_value, coll_type) == 0)
             {
-                // find the point it applies to
-                // std::cerr << "checkpoint 6c1" << std::endl;
                 if (hitPHandle.isInvalid()) {
                     std::cerr << "invalid hitP handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid hitP handle";
@@ -449,6 +455,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     int target = targetHandle.get(constraint_ptoff);
                     int targetPtoff = output_geo->pointOffset(target);
 
+                    // Calculate constraint correction
                     UT_Vector3 hit_p = hitPHandle.get(constraint_ptoff);
                     UT_Vector3 hit_n = hitNHandle.get(constraint_ptoff);
 
@@ -458,6 +465,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     hasCollidedHandle.set(targetPtoff, 1);
                     collisionNormalHandle.set(targetPtoff, hit_n);
 
+                    // Apply constraint correction
                     switch (iterType) {
                         case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
                             ppositions[targetPtoff] += correction;
@@ -472,8 +480,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             }
         }
 
+        // Aggregate corrections for Jacobi iteration
         if (iterType == SOP_ProjectConstraintsEnums::IterationType::JACOBI) {
-            // need to average the corrections
+            // Find the average correction for each point
             GA_Offset ptoff;
             GA_FOR_ALL_PTOFF(output_geo, ptoff) 
             {
@@ -506,6 +515,6 @@ SOP_ProjectConstraints::inputLabel(unsigned idx) const
         case 2:
             return "Colliders";
         default:
-            return "Source Geo";
+            return "Invalid Source";
     }
 }

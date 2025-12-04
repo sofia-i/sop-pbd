@@ -43,7 +43,6 @@ using namespace UT::Literal;
 extern const UT_StringHolder attachment_type;
 extern const UT_StringHolder dist_type;
 extern const UT_StringHolder coll_type;
-extern const UT_StringHolder geo_propp;
 
 class SOP_ProjectConstraintsVerb : public SOP_NodeVerb
 {
@@ -57,7 +56,6 @@ public:
 
     static const UT_StringHolder theSOPTypeName;
     static const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> theVerb;
-    // static const char *const theDsFile;
 };
 
 const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);
@@ -81,6 +79,6 @@ protected:
 
 
 };
-} // End HDK_Sample namespace
+} // End HDK_PBD namespace
 
 #endif
