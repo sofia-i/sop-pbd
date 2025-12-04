@@ -158,6 +158,20 @@ static const char *theDsFile = R"THEDSFILE(
             type    string
             default { "invMass" }
         }
+        parm {
+            name    "collided_attr"
+            cppname "HasCollidedAttributeName"
+            label   "Has Collided Attribute Name"
+            type    string
+            default { "collided" }
+        }
+        parm {
+            name    "cN_attr"
+            cppname "CollisionNormalAttributeName"
+            label   "Collision Normal Attribute Name"
+            type    string
+            default { "cN" }
+        }
     }
 }
 )THEDSFILE";
@@ -250,6 +264,8 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder hitN_attr        = sopparms.getHitNAttributeName();
     UT_StringHolder dist_attr        = sopparms.getDistanceAttributeName();
     UT_StringHolder invMass_attr     = sopparms.getInvMassAttributeName();
+    UT_StringHolder collided_attr    = sopparms.getHasCollidedAttributeName();
+    UT_StringHolder cN_attr          = sopparms.getCollisionNormalAttributeName();
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
@@ -414,8 +430,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             {
                 // find the point it applies to
                 // std::cerr << "checkpoint 6c1" << std::endl;
-                int target = targetHandle.get(constraint_ptoff);
-                int targetPtoff = output_geo->pointOffset(target);
                 if (hitPHandle.isInvalid()) {
                     std::cerr << "invalid hitP handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid hitP handle";
@@ -426,12 +440,23 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     const char* message = "Unable to process constraint with invalid hitN handle";
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
+                else if (hasCollidedHandle.isInvalid() || collisionNormalHandle.isInvalid()) {
+                    std::cerr << "invalid collision normal handle" << std::endl;
+                    const char* message = "Unable to process constraint with invalid collision normal handle";
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                }
                 else {
+                    int target = targetHandle.get(constraint_ptoff);
+                    int targetPtoff = output_geo->pointOffset(target);
+
                     UT_Vector3 hit_p = hitPHandle.get(constraint_ptoff);
                     UT_Vector3 hit_n = hitNHandle.get(constraint_ptoff);
 
                     UT_Vector3 propp = ppositions[targetPtoff];
                     UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
+
+                    hasCollidedHandle.set(targetPtoff, 1);
+                    collisionNormalHandle.set(targetPtoff, hit_n);
 
                     switch (iterType) {
                         case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
