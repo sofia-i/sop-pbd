@@ -55,19 +55,6 @@ newSopOperator(OP_OperatorTable *table)
         0));
 }
 
-const UT_StringHolder HDK_PBD::parm_iters = "iters";
-const UT_StringHolder HDK_PBD::parm_doColl = "doColl";
-const UT_StringHolder HDK_PBD::parm_doAttach = "doAttach";
-const UT_StringHolder HDK_PBD::parm_doDist = "doDist";
-const UT_StringHolder HDK_PBD::parm_itertype = "iterType";
-const UT_StringHolder HDK_PBD::parm_typeattr = "type_attr";
-const UT_StringHolder HDK_PBD::parm_targetattr = "target_attr";
-const UT_StringHolder HDK_PBD::parm_target2attr = "target2_attr";
-const UT_StringHolder HDK_PBD::parm_hitpattr = "hitp_attr";
-const UT_StringHolder HDK_PBD::parm_hitnattr = "hitn_attr";
-const UT_StringHolder HDK_PBD::parm_distattr = "dist_attr";
-const UT_StringHolder HDK_PBD::parm_invmassattr = "invMass_attr";
-
 const UT_StringHolder HDK_PBD::attachment_type = "attachment";
 const UT_StringHolder HDK_PBD::dist_type = "dist";
 const UT_StringHolder HDK_PBD::coll_type = "collision";
@@ -270,7 +257,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     GA_ROHandleS type(constraints, GA_ATTRIB_POINT, type_attr);
     if(!type.isValid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid type handle" << std::endl;
-        cookparms.sopAddError(SOP_MESSAGE, strcat(strcat("Constraints missing type property with name'", + type_attr.c_str()), "'."));
+        char buffer[100];
+        snprintf(buffer, 100, "Constraints missing type property with name'%s'.", type_attr.c_str());
+        cookparms.sopAddError(SOP_MESSAGE, buffer);
         return;
     }
 
@@ -312,7 +301,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
     // Iterate over each constraint
     int nIterations = sopparms.getIterations();
-    // int nIterations = evalInt(parm_iters, 0, context.getTime());
     for (int i = 0; i < nIterations; ++i) 
     {
         GA_Offset constraint_ptoff;
@@ -425,10 +413,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         GA_Offset ptoff;
         GA_FOR_ALL_PTOFF(output_geo, ptoff)
         {
-            UT_Vector3 corr = ppositions[ptoff] - old_ppositions[ptoff];
-            // std::cerr << "adjust point with offset " << ptoff << " by " << corr << std::endl;
             proppHandle.set(ptoff, ppositions[ptoff]);
-            // gdp->setPos3(ptoff, ppositions[ptoff]);
         }
     }
 

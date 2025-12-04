@@ -40,19 +40,6 @@ namespace HDK_PBD {
 
 using namespace UT::Literal;
 
-extern const UT_StringHolder parm_iters;
-extern const UT_StringHolder parm_doColl;
-extern const UT_StringHolder parm_doAttach;
-extern const UT_StringHolder parm_doDist;
-extern const UT_StringHolder parm_itertype;
-extern const UT_StringHolder parm_typeattr;
-extern const UT_StringHolder parm_targetattr;
-extern const UT_StringHolder parm_target2attr;
-extern const UT_StringHolder parm_hitpattr;
-extern const UT_StringHolder parm_hitnattr;
-extern const UT_StringHolder parm_distattr;
-extern const UT_StringHolder parm_invmassattr;
-
 extern const UT_StringHolder attachment_type;
 extern const UT_StringHolder dist_type;
 extern const UT_StringHolder coll_type;
