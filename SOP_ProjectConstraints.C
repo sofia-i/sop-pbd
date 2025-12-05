@@ -101,6 +101,20 @@ static const char *theDsFile = R"THEDSFILE(
             "jacobi"     "Jacobi"
         }
     }
+    parm {
+        name    "timestep"
+        cppname "Timestep"
+        label   "Timestep"
+        type    float
+        default { "1/($FPS * chs(\"../../substep\"))" }
+    }
+    parm {
+        name    "xpbd_flag"
+        cppname "doXpbd"
+        label   "Do XPBD"
+        type    toggle
+        default { "1" }
+    }
     groupcollapsible {
         name        "prop_name_folder"
         label       "Attribute Names"
@@ -119,6 +133,13 @@ static const char *theDsFile = R"THEDSFILE(
                 label   "Type Attribute Name"
                 type    string
                 default { "type" }
+            }
+            parm {
+                name    "compliance_attr"
+                cppname "ComplianceAttributeName"
+                label   "Compliance Attribute Name"
+                type    string
+                default { "compliance" }
             }
             parm {
                 name    "target_attr"
@@ -277,6 +298,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder collided_attr    = sopparms.getHasCollidedAttributeName();
     UT_StringHolder cN_attr          = sopparms.getCollisionNormalAttributeName();
     UT_StringHolder propp_attr       = sopparms.getProposedPositionAttributeName();
+    UT_StringHolder compliance_attr  = sopparms.getComplianceAttributeName();
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
@@ -288,6 +310,25 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         snprintf(buffer, 100, "Constraints missing type property with name'%s'.", type_attr.c_str());
         cookparms.sopAddError(SOP_MESSAGE, buffer);
         return;
+    }
+
+    // if compliance not included, default to pbd with k=1
+    std::map<GA_Offset, float> compliance;
+    GA_ROHandleF complianceProp(constraints, GA_ATTRIB_POINT, compliance_attr);
+    if (complianceProp.isValid()) {
+        GA_Offset constraint_ptoff;
+        GA_FOR_ALL_PTOFF(constraints, constraint_ptoff)
+        {
+            compliance[constraint_ptoff] = complianceProp.get(constraint_ptoff);
+        }
+    }
+    else {
+        cookparms.sopAddWarning(SOP_MESSAGE, "Missing compliance attribute. Defaulting to 1.");
+        GA_Offset constraint_ptoff;
+        GA_FOR_ALL_PTOFF(constraints, constraint_ptoff)
+        {
+            compliance[constraint_ptoff] = 1.;
+        }
     }
 
     GA_RWHandleV3 proppHandle(output_geo, GA_ATTRIB_POINT, propp_attr);
@@ -337,6 +378,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     bool doDist = sopparms.getDoDistance();
     bool doColl = sopparms.getDoCollision();
 
+    double timestep = sopparms.getTimestep();
+    double inv_time_squared = 1. / (timestep * timestep);
+
     // Iterate over each constraint
     int nIterations = sopparms.getIterations();
     for (int i = 0; i < nIterations; ++i) 
@@ -349,6 +393,12 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 return;
             }
             const char *type_value = type.get(constraint_ptoff);
+
+            double alpha;
+            alpha = compliance[constraint_ptoff] * inv_time_squared;
+            std::cerr << "alpha for constraint " << constraint_ptoff << ": " << alpha << std::endl;
+
+            int constraint_idx = constraints->pointIndex(constraint_ptoff);
 
             // Attachment Constraint
             if (doAttachment && strcmp(type_value, attachment_type) == 0)
@@ -412,7 +462,13 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     float w2 = invMassHandle(target2Ptoff);
 
                     float distDiff = (p1 - p2).length() - dist;
-                    float s = distDiff / (w1 + w2);
+                    float s;
+                    if (sopparms.getDoXpbd()) {
+                        s = distDiff / (w1 + w2 + alpha);
+                    }
+                    else {
+                        s = distDiff / (w1 + w2);
+                    }
 
                     UT_Vector3 correction1 = -diff * w1 * s;
                     UT_Vector3 correction2 = diff * w2 * s;
@@ -451,6 +507,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     const char* message = "Unable to process constraint with invalid collision normal handle";
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
+                else if (invMassHandle.isInvalid()) {
+                    std::cerr << "invalid inv mass handle" << std::endl;
+                    const char* message = "Unable to process constraint with invalid inv mass handle";
+                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                }
                 else {
                     int target = targetHandle.get(constraint_ptoff);
                     int targetPtoff = output_geo->pointOffset(target);
@@ -460,7 +521,18 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 hit_n = hitNHandle.get(constraint_ptoff);
 
                     UT_Vector3 propp = ppositions[targetPtoff];
-                    UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
+                    float w = invMassHandle(targetPtoff);
+
+                    float s;
+                    if (sopparms.getDoXpbd()) {
+                        s = dot(propp - hit_p, hit_n) / (w * dot(hit_n, hit_n) + alpha);
+                    }
+                    else {
+                        s = dot(propp - hit_p, hit_n) / (w * dot(hit_n, hit_n));
+                    }
+
+                    // UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
+                    UT_Vector3 correction = -s * w * hit_n;
 
                     hasCollidedHandle.set(targetPtoff, 1);
                     collisionNormalHandle.set(targetPtoff, hit_n);
