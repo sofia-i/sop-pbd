@@ -368,11 +368,20 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     }
     
     GA_ROHandleD invMassHandle(simgeo_input, GA_ATTRIB_POINT, invMass_attr);
-    GA_ROHandleI targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
+    // GA_ROHandleI targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
+    GA_ROHandleIA targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
     GA_ROHandleI target2Handle(constraints, GA_ATTRIB_POINT, target2_attr);
     GA_ROHandleV3 hitPHandle(constraints, GA_ATTRIB_POINT, hitP_attr);
     GA_ROHandleV3 hitNHandle(constraints, GA_ATTRIB_POINT, hitN_attr);
     GA_ROHandleD distHandle(constraints, GA_ATTRIB_POINT, dist_attr);
+
+    if(targetHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid target handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Constraints missing target property named '%s'.", target_attr.c_str());
+        cookparms.sopAddError(SOP_MESSAGE, buffer);
+        return;
+    }
 
     bool doAttachment = sopparms.getDoAttachment();
     bool doDist = sopparms.getDoDistance();
@@ -400,38 +409,54 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
             int constraint_idx = constraints->pointIndex(constraint_ptoff);
 
+            UT_Int32Array targets; 
+            targetHandle.get(constraint_ptoff, targets);
+
             // Attachment Constraint
             if (doAttachment && strcmp(type_value, attachment_type) == 0)
             {
-                int target = targetHandle.get(constraint_ptoff);
-                int targetPtoff = output_geo->pointOffset(target);
+                // int target = targetHandle.get(constraint_ptoff);
+                if (targets.size() < 1) {
+                    char buffer[100];
+                    snprintf(buffer, 100, "Constraint %i: expected 1 target, got %lli.", constraint_idx, targets.size());
+                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+                }
+                else {
+                    int target = targets[0];
+                    int targetPtoff = output_geo->pointOffset(target);
 
-                // Calculate constraint correction
-                UT_Vector3 location = constraints->getPos3(constraint_ptoff);
-                UT_Vector3 propp = ppositions[targetPtoff];
+                    // Calculate constraint correction
+                    UT_Vector3 location = constraints->getPos3(constraint_ptoff);
+                    UT_Vector3 propp = ppositions[targetPtoff];
 
-                UT_Vector3 correction = location - propp;
+                    UT_Vector3 correction = location - propp;
 
-                // Apply constraint correction
-                switch (iterType) {
-                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                        ppositions[targetPtoff] += correction;
-                        break;
-                    }
-                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                        corrections[targetPtoff] += correction;
-                        nCorrections[targetPtoff] += 1;
+                    // Apply constraint correction
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            ppositions[targetPtoff] += correction;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            corrections[targetPtoff] += correction;
+                            nCorrections[targetPtoff] += 1;
+                        }
                     }
                 }
             }
             // Distance Constraint
             else if (doDist && strcmp(type_value, dist_type) == 0)
             {
-                if (target2Handle.isInvalid()) {
-                    std::cerr << "invalid target 2 handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid target2 handle";
+                if (targets.size() < 2) {
+                    char message[100];
+                    snprintf(message, 100, "Unable to process dist constraint. Targets: expected: %i, got %lli.", 2, targets.size());
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
+                // if (target2Handle.isInvalid()) {
+                //     std::cerr << "invalid target 2 handle" << std::endl;
+                //     const char* message = "Unable to process constraint with invalid target2 handle";
+                //     cookparms.sopAddWarning(SOP_MESSAGE, message);
+                // }
                 else if (distHandle.isInvalid()) {
                     std::cerr << "invalid dist handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid dist handle";
@@ -443,8 +468,8 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else {
-                    int target = targetHandle.get(constraint_ptoff);
-                    int target2 = target2Handle.get(constraint_ptoff);
+                    int target = targets[0];
+                    int target2 = targets[1];
 
                     int targetPtoff = output_geo->pointOffset(target);
                     int target2Ptoff = output_geo->pointOffset(target2);
@@ -492,7 +517,12 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             // Collision Constraint
             else if (doColl && strcmp(type_value, coll_type) == 0)
             {
-                if (hitPHandle.isInvalid()) {
+                if (targets.size() < 1) {
+                    char buffer[100];
+                    snprintf(buffer, 100, "Constraint %i: expected 1 target, got %lli.", constraint_idx, targets.size());
+                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+                }
+                else if (hitPHandle.isInvalid()) {
                     std::cerr << "invalid hitP handle" << std::endl;
                     const char* message = "Unable to process constraint with invalid hitP handle";
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
@@ -513,7 +543,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else {
-                    int target = targetHandle.get(constraint_ptoff);
+                    int target = targets[0];
                     int targetPtoff = output_geo->pointOffset(target);
 
                     // Calculate constraint correction
