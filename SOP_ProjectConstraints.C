@@ -198,6 +198,27 @@ static const char *theDsFile = R"THEDSFILE(
                 default { "propp" }
             }
             parm {
+                name    "orientation_attr"
+                cppname "OrientationAttributeName"
+                label   "Orientation Attribute Name"
+                type    string
+                default { "orient" }
+            }
+            parm {
+                name    "ang_vel_attr"
+                cppname "AngularVelocityAttributeName"
+                label   "Angular Vel Attribute Name"
+                type    string
+                default { "w" }
+            }
+            parm {
+                name    "inertia_mat_attr"
+                cppname "InertiaMatrixAttributeName"
+                label   "Inertia Mat Attribute Name"
+                type    string
+                default { "I" }
+            }
+            parm {
                 name    "collided_attr"
                 cppname "HasCollidedAttributeName"
                 label   "Has Collided Attribute Name"
@@ -299,6 +320,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder cN_attr          = sopparms.getCollisionNormalAttributeName();
     UT_StringHolder propp_attr       = sopparms.getProposedPositionAttributeName();
     UT_StringHolder compliance_attr  = sopparms.getComplianceAttributeName();
+    UT_StringHolder orient_attr      = sopparms.getOrientationAttributeName();
+    UT_StringHolder ang_vel_attr     = sopparms.getAngularVelocityAttributeName();
+    UT_StringHolder inert_mat_attr   = sopparms.getInertiaMatrixAttributeName();
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
@@ -340,6 +364,30 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
     proppHandle.bumpDataId();
+
+    GA_RWHandleV4 orientHandle(output_geo, GA_ATTRIB_POINT, orient_attr);
+    if (orientHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid orientation handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Sim geo missing orientation property named '%s'.", orient_attr.c_str());
+        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+    }
+
+    GA_RWHandleV3 angVelHandle(output_geo, GA_ATTRIB_POINT, ang_vel_attr);
+    if (angVelHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid angular velocity handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Sim geo missing angular velocity property named '%s'.", ang_vel_attr.c_str());
+        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+    }
+
+    GA_RWHandleM3 inertiaHandle(output_geo, GA_ATTRIB_POINT, inert_mat_attr);
+    if (inertiaHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid inertia matrix handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Sim geo missing inertia matrix property named '%s'.", inert_mat_attr.c_str());
+        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+    }
 
     GA_RWHandleI hasCollidedHandle(output_geo, GA_ATTRIB_POINT, collided_attr);
     GA_RWHandleV3 collisionNormalHandle(output_geo, GA_ATTRIB_POINT, cN_attr);
