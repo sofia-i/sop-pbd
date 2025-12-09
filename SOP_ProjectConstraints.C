@@ -160,14 +160,14 @@ static const char *theDsFile = R"THEDSFILE(
                 cppname "HitPAttributeName"
                 label   "Hit P Attribute Name"
                 type    string
-                default { "hitp" }
+                default { "P" }
             }
             parm {
                 name    "hitn_attr"
                 cppname "HitNAttributeName"
                 label   "Hit N Attribute Name"
                 type    string
-                default { "hitn" }
+                default { "N" }
             }
             parm {
                 name    "dist_attr"
