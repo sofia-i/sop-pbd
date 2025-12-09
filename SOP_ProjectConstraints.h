@@ -56,6 +56,10 @@ public:
 
     static const UT_StringHolder theSOPTypeName;
     static const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> theVerb;
+
+private:
+    void addInvalidHandleWarning(const CookParms &cookparms, std::string handleName, 
+                                 std::string geoName, std::string propName = "") const;
 };
 
 const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);

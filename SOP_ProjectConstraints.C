@@ -296,6 +296,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     // Copy input geometry into output
     output_geo->replaceWith(*simgeo_input);
 
+    // Collect other inputs
     const GU_Detail *constraints = cookparms.inputGeo(1);
     const GU_Detail *collision = cookparms.inputGeo(2);
 
@@ -326,7 +327,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
-    // Validate inputs - look for required properties for constraints
+    // -- Validate constraint property handles -- //
     GA_ROHandleS type(constraints, GA_ATTRIB_POINT, type_attr);
     if(!type.isValid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid type handle" << std::endl;
@@ -336,7 +337,16 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
 
-    // if compliance not included, default to pbd with k=1
+    GA_ROHandleIA targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
+    if(targetHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid target handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Constraints missing target property named '%s'.", target_attr.c_str());
+        cookparms.sopAddError(SOP_MESSAGE, buffer);
+        return;
+    }
+
+    // Use default compliance k=1 (equiv to pbd)
     std::map<GA_Offset, float> compliance;
     GA_ROHandleF complianceProp(constraints, GA_ATTRIB_POINT, compliance_attr);
     if (complianceProp.isValid()) {
@@ -355,6 +365,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         }
     }
 
+    // -- Validate sim geo property handles -- //
     GA_RWHandleV3 proppHandle(output_geo, GA_ATTRIB_POINT, propp_attr);
     if(proppHandle.isInvalid()) {
         std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propp handle" << std::endl;
@@ -363,31 +374,24 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         cookparms.sopAddError(SOP_MESSAGE, buffer);
         return;
     }
-    proppHandle.bumpDataId();
 
     GA_RWHandleV4 orientHandle(output_geo, GA_ATTRIB_POINT, orient_attr);
     if (orientHandle.isInvalid()) {
-        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid orientation handle" << std::endl;
-        char buffer[100];
-        snprintf(buffer, 100, "Sim geo missing orientation property named '%s'.", orient_attr.c_str());
-        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+        addInvalidHandleWarning(cookparms, "orientation", "Sim geo", orient_attr.c_str());
     }
 
     GA_RWHandleV3 angVelHandle(output_geo, GA_ATTRIB_POINT, ang_vel_attr);
     if (angVelHandle.isInvalid()) {
-        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid angular velocity handle" << std::endl;
-        char buffer[100];
-        snprintf(buffer, 100, "Sim geo missing angular velocity property named '%s'.", ang_vel_attr.c_str());
-        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+        addInvalidHandleWarning(cookparms, "angular velocity", "Sim geo", ang_vel_attr.c_str());
     }
 
     GA_RWHandleM3 inertiaHandle(output_geo, GA_ATTRIB_POINT, inert_mat_attr);
     if (inertiaHandle.isInvalid()) {
-        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid inertia matrix handle" << std::endl;
-        char buffer[100];
-        snprintf(buffer, 100, "Sim geo missing inertia matrix property named '%s'.", inert_mat_attr.c_str());
-        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+        addInvalidHandleWarning(cookparms, "inertia matrix", "Sim geo", inert_mat_attr.c_str());
     }
+
+    // -- Bump sim geo handles that we will change -- // 
+    proppHandle.bumpDataId();
 
     GA_RWHandleI hasCollidedHandle(output_geo, GA_ATTRIB_POINT, collided_attr);
     GA_RWHandleV3 collisionNormalHandle(output_geo, GA_ATTRIB_POINT, cN_attr);
@@ -398,6 +402,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         collisionNormalHandle.bumpDataId();
     }
 
+    // Constraint projection data
     std::map<GA_Offset, UT_Vector3> ppositions;
     std::map<GA_Offset, UT_Vector3> old_ppositions;
     std::map<GA_Offset, UT_Vector3> corrections;
@@ -416,20 +421,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     }
     
     GA_ROHandleD invMassHandle(simgeo_input, GA_ATTRIB_POINT, invMass_attr);
-    // GA_ROHandleI targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
-    GA_ROHandleIA targetHandle(constraints, GA_ATTRIB_POINT, target_attr);
-    GA_ROHandleI target2Handle(constraints, GA_ATTRIB_POINT, target2_attr);
     GA_ROHandleV3 hitPHandle(constraints, GA_ATTRIB_POINT, hitP_attr);
     GA_ROHandleV3 hitNHandle(constraints, GA_ATTRIB_POINT, hitN_attr);
     GA_ROHandleD distHandle(constraints, GA_ATTRIB_POINT, dist_attr);
-
-    if(targetHandle.isInvalid()) {
-        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid target handle" << std::endl;
-        char buffer[100];
-        snprintf(buffer, 100, "Constraints missing target property named '%s'.", target_attr.c_str());
-        cookparms.sopAddError(SOP_MESSAGE, buffer);
-        return;
-    }
 
     bool doAttachment = sopparms.getDoAttachment();
     bool doDist = sopparms.getDoDistance();
@@ -438,6 +432,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     double timestep = sopparms.getTimestep();
     double inv_time_squared = 1. / (timestep * timestep);
 
+    // CONSTRAINT PROJECTION
     // Iterate over each constraint
     int nIterations = sopparms.getIterations();
     for (int i = 0; i < nIterations; ++i) 
@@ -500,20 +495,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     snprintf(message, 100, "Unable to process dist constraint. Targets: expected: %i, got %lli.", 2, targets.size());
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
-                // if (target2Handle.isInvalid()) {
-                //     std::cerr << "invalid target 2 handle" << std::endl;
-                //     const char* message = "Unable to process constraint with invalid target2 handle";
-                //     cookparms.sopAddWarning(SOP_MESSAGE, message);
-                // }
                 else if (distHandle.isInvalid()) {
-                    std::cerr << "invalid dist handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid dist handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                    addInvalidHandleWarning(cookparms, "dist", "constraint");
                 }
                 else if (invMassHandle.isInvalid()) {
-                    std::cerr << "invalid inv mass handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid inv mass handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
                 }
                 else {
                     int target = targets[0];
@@ -571,24 +557,19 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     cookparms.sopAddWarning(SOP_MESSAGE, buffer);
                 }
                 else if (hitPHandle.isInvalid()) {
-                    std::cerr << "invalid hitP handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid hitP handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                    addInvalidHandleWarning(cookparms, "hitP", "constraint");
                 }
                 else if (hitNHandle.isInvalid()) {
-                    std::cerr << "invalid hitN handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid hitN handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                    addInvalidHandleWarning(cookparms, "hitN", "constraint");
                 }
-                else if (hasCollidedHandle.isInvalid() || collisionNormalHandle.isInvalid()) {
-                    std::cerr << "invalid collision normal handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid collision normal handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                else if (hasCollidedHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "has collided", "Sim geo");
+                }
+                else if (collisionNormalHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "collision normal", "Sim geo");
                 }
                 else if (invMassHandle.isInvalid()) {
-                    std::cerr << "invalid inv mass handle" << std::endl;
-                    const char* message = "Unable to process constraint with invalid inv mass handle";
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
                 }
                 else {
                     int target = targets[0];
@@ -652,6 +633,21 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     }
 
     return;
+}
+
+void 
+SOP_ProjectConstraintsVerb::addInvalidHandleWarning(const CookParms &cookparms, 
+                                                    std::string handleName,
+                                                    std::string geoName, 
+                                                    std::string propName) const
+{
+    std::cerr << "invalid " << handleName << " handle" << std::endl;
+    std::string message = geoName + " missing " + handleName + " handle";
+    if (!propName.empty()) {
+        message += " (property named \"" + propName +  "\")";
+    }
+    const char* c_message = message.c_str();
+    cookparms.sopAddWarning(SOP_MESSAGE, c_message);
 }
 
 const char *
