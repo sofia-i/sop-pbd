@@ -1,0 +1,77 @@
+int simGeo = 1;
+int collGeo = 2;
+int np = npoints(simGeo);
+
+string collgroups[] = detailintrinsic(collGeo, "primitivegroups");
+
+int checkProposed = 1;
+int checkLast = 1;
+
+float epsilon = 0.00001;
+float sceneSize = 3.;
+
+void addCollConstraint(int target, collGeo, hit; vector hit_p, hit_uvw) {
+    int pt = addpoint(0, hit_p);
+    int targets[] = array(target);
+    setpointattrib(0, "type", pt, "collision");
+    // setpointattrib(0, "target", pt, target);
+    setpointattrib(0, "target", pt, targets);
+    
+    vector hit_n = prim_normal(collGeo, hit, hit_uvw);
+    setpointattrib(0, "N", pt, hit_n);
+}
+
+for (int i = 0; i < np; ++i) {
+    // if (inpointgroup(simGeo, "constrained", i)) {
+    //     continue;
+    // }
+    vector x = point(simGeo, "P", i);
+    vector p = point(simGeo, "propp", i);
+    
+    int foundCollision = 0;
+    
+    // check backface on ray between current position and last position
+    if (checkLast) {
+        vector prev_x = point(simGeo, "prevP", i);
+        vector dir = normalize(prev_x - x) * sceneSize;
+        // dir += normalize(dir) * point(simGeo, "r", i);
+        // if (length(dir) < epsilon) {
+        //     continue;
+        // }
+        vector start = x;
+        
+        foreach (string group; collgroups) {
+            vector hit_p;
+            vector hit_uvw;
+            int hit = intersect(collGeo, group, start, dir, hit_p, hit_uvw);
+            
+            if (hit != -1) {
+                vector hit_n = prim_normal(collGeo, hit, hit_uvw);
+                if (dot(hit_n, prev_x - x) > 0) {
+                    printf("add inside collision\n");
+                    foundCollision = 1;
+                    addCollConstraint(i, collGeo, hit, hit_p, hit_uvw);
+                }
+            }
+        }
+    }
+    
+    if (!foundCollision && checkProposed) {
+        vector dir = (p - x);
+        vector start = x;
+        
+        // Raycast to check for intersection during this timestep
+        
+        foreach (string group; collgroups) {
+            vector hit_p;
+            vector hit_uvw;
+            int hit = intersect(collGeo, group, start, dir, hit_p, hit_uvw);
+            
+            if (hit != -1) {
+                printf("add proposed collision\n");
+                foundCollision = 1;
+                addCollConstraint(i, collGeo, hit, hit_p, hit_uvw);
+            }
+        }
+    }
+}

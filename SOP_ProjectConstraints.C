@@ -25,13 +25,13 @@
  *----------------------------------------------------------------------------
  * The PBD SOP.  
  */
-#include "SOP_ProjectConstraints.proto.h"
+
 #include "SOP_ProjectConstraints.h"
+#include "MathUtils.h"
 
 #include <GU/GU_Detail.h>
 #include <OP/OP_AutoLockInputs.h>
 #include <OP/OP_Operator.h>
-#include <OP/OP_OperatorTable.h>
 #include <OP/OP_SaveFlags.h>
 #include <PRM/PRM_Include.h>
 #include <PRM/PRM_TemplateBuilder.h>
@@ -41,22 +41,35 @@
 using namespace UT::Literal;
 using namespace HDK_PBD;
 
-void
-newSopOperator(OP_OperatorTable *table)
+OP_Operator*
+SOP_ProjectConstraints::getOperator()
 {
-    table->addOperator(new OP_Operator(
+    return new OP_Operator(
         "hdk_project_constraints",
         "Project Constraints",
         SOP_ProjectConstraints::myConstructor,
         SOP_ProjectConstraints::buildTemplates(),
         2,
         3,
-        0));
+        0
+    );
 }
+
+// void
+// newSopOperator(OP_OperatorTable *table)
+// {
+//     table->addOperator(HDK_PBD::SOP_ProjectConstraints::getOperator());
+//     // table->addOperator(HDK_PBD::SOP_CreateCollisionConstraints::getOperator());
+// }
+
+const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);
+const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> SOP_ProjectConstraintsVerb::theVerb;
 
 const UT_StringHolder HDK_PBD::attachment_type = "attachment";
 const UT_StringHolder HDK_PBD::dist_type = "dist";
 const UT_StringHolder HDK_PBD::coll_type = "collision";
+const UT_StringHolder HDK_PBD::rod_ss_type = "rod_ss";
+const UT_StringHolder HDK_PBD::rod_bt_type = "rod_bt";
 
 static const char *theDsFile = R"THEDSFILE(
 {
@@ -87,6 +100,20 @@ static const char *theDsFile = R"THEDSFILE(
         name    "doDist"
         cppname "DoDistance"
         label   "Do Distance"
+        type    toggle
+        default { "1" }
+    }
+    parm {
+        name    "doStretchStrain"
+        cppname "DoStretchStrain"
+        label   "Do Stretch and Strain"
+        type    toggle
+        default { "1" }
+    }
+    parm {
+        name    "doBendTwist"
+        cppname "DoBendTwist"
+        label   "Do Bend and Twist"
         type    toggle
         default { "1" }
     }
@@ -191,11 +218,39 @@ static const char *theDsFile = R"THEDSFILE(
                 default { "invMass" }
             }
             parm {
+                name    "oriInvMass_attr"
+                cppname "OrientationInvMassAttributeName"
+                label   "Orientation Inv Mass Attribute Name"
+                type    string
+                default { "oriInvMass" }
+            }
+            parm {
+                name    "length_attr"
+                cppname "LengthAttributeName"
+                label   "Length Attribute Name"
+                type    string
+                default { "length" }
+            }
+            parm {
+                name    "rest_darboux"
+                cppname "RestDarbouxAttributeName"
+                label   "Rest Darboux Vector Attribute Name"
+                type    string
+                default { "rest_darboux" }
+            }
+            parm {
                 name    "propp_attr"
                 cppname "ProposedPositionAttributeName"
                 label   "Proposed Position Attribute Name"
                 type    string
                 default { "propp" }
+            }
+            parm {
+                name    "propo_attr"
+                cppname "ProposedOrientationAttributeName"
+                label   "Proposed Orientation Attribute Name"
+                type    string
+                default { "propo" }
             }
             parm {
                 name    "orientation_attr"
@@ -291,7 +346,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
     // Input detail
     const GEO_Detail *const simgeo_input = cookparms.inputGeo(0);
-    UT_ASSERT(simgeo_input);
+    if (!simgeo_input) {
+        std::cerr << "invalid sim geo detail pointer" << std::endl;
+        return;
+    }
+    // UT_ASSERT(simgeo_input);
 
     // Copy input geometry into output
     output_geo->replaceWith(*simgeo_input);
@@ -300,11 +359,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     const GU_Detail *constraints = cookparms.inputGeo(1);
     const GU_Detail *collision = cookparms.inputGeo(2);
 
-    UT_ASSERT(constraints);
-    UT_ASSERT(collision);
+    // UT_ASSERT(constraints);
+    // UT_ASSERT(collision);
 
     // If constraints are empty, then return without doing anything
-    if (constraints->getNumPoints() == 0) {
+    if (!constraints || constraints->getNumPoints() == 0) {
         cookparms.sopAddWarning(SOP_MESSAGE, "Constraints empty");
         return;
     }
@@ -324,6 +383,10 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder orient_attr      = sopparms.getOrientationAttributeName();
     UT_StringHolder ang_vel_attr     = sopparms.getAngularVelocityAttributeName();
     UT_StringHolder inert_mat_attr   = sopparms.getInertiaMatrixAttributeName();
+    UT_StringHolder length_attr      = sopparms.getLengthAttributeName();
+    UT_StringHolder rest_darboux_attr= sopparms.getRestDarbouxAttributeName();
+    UT_StringHolder ori_invMass_attr = sopparms.getOrientationInvMassAttributeName();
+    UT_StringHolder propo_attr       = sopparms.getProposedOrientationAttributeName();
 
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
 
@@ -375,6 +438,15 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
 
+    GA_RWHandleV4 propoHandle(output_geo, GA_ATTRIB_POINT, propo_attr);
+    if (propoHandle.isInvalid()) {
+        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propo handle" << std::endl;
+        char buffer[100];
+        snprintf(buffer, 100, "Sim geo missing proposed orientation property named '%s'.", propo_attr.c_str());
+        cookparms.sopAddError(SOP_MESSAGE, buffer);
+        return;
+    }
+
     GA_RWHandleV4 orientHandle(output_geo, GA_ATTRIB_POINT, orient_attr);
     if (orientHandle.isInvalid()) {
         addInvalidHandleWarning(cookparms, "orientation", "Sim geo", orient_attr.c_str());
@@ -385,13 +457,14 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         addInvalidHandleWarning(cookparms, "angular velocity", "Sim geo", ang_vel_attr.c_str());
     }
 
-    GA_RWHandleM3 inertiaHandle(output_geo, GA_ATTRIB_POINT, inert_mat_attr);
-    if (inertiaHandle.isInvalid()) {
-        addInvalidHandleWarning(cookparms, "inertia matrix", "Sim geo", inert_mat_attr.c_str());
-    }
+    // GA_RWHandleM3 inertiaHandle(output_geo, GA_ATTRIB_POINT, inert_mat_attr);
+    // if (inertiaHandle.isInvalid()) {
+    //     addInvalidHandleWarning(cookparms, "inertia matrix", "Sim geo", inert_mat_attr.c_str());
+    // }
 
     // -- Bump sim geo handles that we will change -- // 
     proppHandle.bumpDataId();
+    propoHandle.bumpDataId();
 
     GA_RWHandleI hasCollidedHandle(output_geo, GA_ATTRIB_POINT, collided_attr);
     GA_RWHandleV3 collisionNormalHandle(output_geo, GA_ATTRIB_POINT, cN_attr);
@@ -408,6 +481,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     std::map<GA_Offset, UT_Vector3> corrections;
     std::map<GA_Offset, int> nCorrections;
 
+    std::map<GA_Offset, UT_Vector4> porientations;
+    std::map<GA_Offset, UT_Vector4> old_porientations;
+    std::map<GA_Offset, UT_Vector4> oCorrections;
+    std::map<GA_Offset, int> nOCorrections;
+
     // Fill in the proposed positions
     {
         GA_Offset ptoff;
@@ -417,6 +495,11 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             old_ppositions[ptoff] = proppHandle.get(ptoff);
             corrections[ptoff] = UT_Vector3{0., 0., 0.};
             nCorrections[ptoff] = 0.;
+
+            porientations[ptoff] = propoHandle.get(ptoff);
+            old_porientations[ptoff] = propoHandle.get(ptoff);
+            oCorrections[ptoff] = UT_Vector4{0., 0., 0., 0.};
+            nOCorrections[ptoff] = 0.;
         }
     }
     
@@ -424,10 +507,15 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     GA_ROHandleV3 hitPHandle(constraints, GA_ATTRIB_POINT, hitP_attr);
     GA_ROHandleV3 hitNHandle(constraints, GA_ATTRIB_POINT, hitN_attr);
     GA_ROHandleD distHandle(constraints, GA_ATTRIB_POINT, dist_attr);
+    GA_ROHandleD lengthHandle(simgeo_input, GA_ATTRIB_POINT, length_attr);
+    GA_ROHandleV3 restDarbouxHandle(simgeo_input, GA_ATTRIB_POINT, rest_darboux_attr);
+    GA_ROHandleD oriInvMassHandle(simgeo_input, GA_ATTRIB_POINT, ori_invMass_attr);
 
     bool doAttachment = sopparms.getDoAttachment();
     bool doDist = sopparms.getDoDistance();
     bool doColl = sopparms.getDoCollision();
+    bool doStretchStrain = sopparms.getDoStretchStrain();
+    bool doBendTwist = sopparms.getDoBendTwist();
 
     double timestep = sopparms.getTimestep();
     double inv_time_squared = 1. / (timestep * timestep);
@@ -448,7 +536,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
             double alpha;
             alpha = compliance[constraint_ptoff] * inv_time_squared;
-            std::cerr << "alpha for constraint " << constraint_ptoff << ": " << alpha << std::endl;
+            // std::cerr << "alpha for constraint " << constraint_ptoff << ": " << alpha << std::endl;
 
             int constraint_idx = constraints->pointIndex(constraint_ptoff);
 
@@ -609,6 +697,134 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     }
                 }
             }
+            else if (doStretchStrain && strcmp(type_value, rod_ss_type) == 0)
+            {
+                if (invMassHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
+                }
+                else if (oriInvMassHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "orientation inv mass", "Sim geo");
+                }
+                else if (lengthHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "length", "Sim geo");
+                }
+                else {
+                    int target = targets[0];
+                    int target2 = targets[1];
+
+                    int targetPtoff = output_geo->pointOffset(target);
+                    int target2Ptoff = output_geo->pointOffset(target2);
+
+                    UT_Vector3 p1 = ppositions[targetPtoff];
+                    UT_Vector3 p2 = ppositions[target2Ptoff];
+
+                    UT_Vector4 q = porientations[targetPtoff];
+                    
+                    float w1 = invMassHandle.get(target);
+                    float w2 = invMassHandle.get(target2);
+                    float wq = oriInvMassHandle(target);
+
+                    float length = lengthHandle.get(targetPtoff);
+
+                    float s;
+                    if (sopparms.getDoXpbd()) {
+                        s = (length) / (w1 + w2 + 4. * wq * length * length + alpha);
+                    }
+                    else {
+                        s = (length) / (w1 + w2 + 4. * wq * length * length);
+                    }
+
+                    UT_Vector4 e3 = {0., 0., 0., 1.};
+                    UT_Vector3 d3 = PBD::MathUtils::quatImagPart(PBD::MathUtils::quatProd(PBD::MathUtils::quatProd(q, e3), PBD::MathUtils::quatConjugate(q)));
+
+                    // UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
+                    UT_Vector3 correction1 = w1 * s * ((1. / length) * (p2 - p1) - d3);
+                    UT_Vector3 correction2 = -w2 * s * ((1. / length) * (p2 - p1) - d3);
+                    UT_Vector4 correctionq = 2. * wq * length * s * PBD::MathUtils::quatProd(PBD::MathUtils::quatEmbed((1. / length) * (p2 - p1) - d3), PBD::MathUtils::quatProd(q, PBD::MathUtils::quatConjugate(e3)));
+
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            ppositions[targetPtoff] += correction1;
+                            ppositions[target2Ptoff] += correction2;
+                            porientations[targetPtoff] += correctionq;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            corrections[targetPtoff] += correction1;
+                            corrections[target2Ptoff] += correction2;
+                            oCorrections[targetPtoff] += correctionq;
+                            nCorrections[targetPtoff] += 1;
+                            nCorrections[target2Ptoff] += 1;
+                            nOCorrections[targetPtoff] += 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            else if (doBendTwist && strcmp(type_value, rod_bt_type) == 0)
+            {
+                if (oriInvMassHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "orientation inv mass", "sim geo");
+                }
+                else if (orientHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "orientation", "sim geo");
+                }
+                else if (lengthHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "length", "sim geo");
+                }
+                else if (restDarbouxHandle.isInvalid()) {
+                    addInvalidHandleWarning(cookparms, "rest darboux", "sim geo");
+                }
+                else {
+                    int target1 = targets[0];
+                    int target2 = targets[1];
+
+                    int target1Ptoff = output_geo->pointOffset(target1);
+                    int target2Ptoff = output_geo->pointOffset(target2);
+
+                    UT_Vector4 q = orientHandle.get(target1Ptoff);
+                    UT_Vector4 u = orientHandle.get(target2Ptoff);
+
+                    float w1 = oriInvMassHandle.get(target1Ptoff);
+                    float w2 = oriInvMassHandle.get(target2Ptoff);
+
+                    float length = lengthHandle.get(target1Ptoff);
+
+                    UT_Vector3 darboux = PBD::MathUtils::darbouxVector(q, u, length);
+                    UT_Vector3 rest_darboux = restDarbouxHandle.get(target1Ptoff);
+
+                    float s;
+                    if (sopparms.getDoXpbd()) {
+                        s = 1. / (w1 + w2 + alpha);
+                    }
+                    else {
+                        s = 1./ (w1 + w2);
+                    }
+
+                    float t;
+
+                    UT_Vector3 darbouxDiff = darboux - t * rest_darboux;
+                    UT_Vector4 darbouxDiffQuat = PBD::MathUtils::quatEmbed(darbouxDiff);
+
+                    UT_Vector4 qCorrection = s * PBD::MathUtils::quatProd(u, darbouxDiffQuat);
+                    UT_Vector4 uCorrection = -s * PBD::MathUtils::quatProd(q, darbouxDiffQuat);
+
+                    switch (iterType) {
+                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                            porientations[target1Ptoff] += qCorrection;
+                            porientations[target2Ptoff] += uCorrection;
+                            break;
+                        }
+                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                            oCorrections[target1Ptoff] += qCorrection;
+                            oCorrections[target2Ptoff] += uCorrection;
+                            nOCorrections[target1Ptoff] += 1;
+                            nOCorrections[target2Ptoff] += 1;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Aggregate corrections for Jacobi iteration
@@ -619,6 +835,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             {
                 UT_Vector3 newPpos = ppositions[ptoff] + (1. / float(nCorrections[ptoff])) * corrections[ptoff];
                 proppHandle.set(ptoff, newPpos);
+
+                UT_Vector4 newOri = porientations[ptoff] + (1. / float(nOCorrections[ptoff])) * oCorrections[ptoff];
+                propoHandle.set(ptoff, newOri);
             }
         }
     }
@@ -629,6 +848,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         GA_FOR_ALL_PTOFF(output_geo, ptoff)
         {
             proppHandle.set(ptoff, ppositions[ptoff]);
+            propoHandle.set(ptoff, porientations[ptoff]);
         }
     }
 

@@ -15,11 +15,15 @@ find_package( Houdini REQUIRED )
 set( library_name SOP_PBD )
 
 # Code generation for the embedded DS file 
-houdini_generate_proto_headers( FILES SOP_ProjectConstraints.C )
+houdini_generate_proto_headers( FILES SOP_ProjectConstraints.C 
+                                      SOP_CreateConstraints.C)
 
 # Add a library and its source files.
 add_library( ${library_name} SHARED
     SOP_ProjectConstraints.C
+    MathUtils.C
+    PBD.C
+    SOP_CreateConstraints.C
 )
 
 # Link against the Houdini libraries, and add required include directories and
@@ -30,6 +34,8 @@ target_link_libraries( ${library_name} Houdini )
 target_include_directories( ${library_name} PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
+
+target_compile_options(${library_name} PRIVATE -g)
 
 # Sets several common target properties, such as the library's output directory.
 houdini_configure_target( ${library_name} )

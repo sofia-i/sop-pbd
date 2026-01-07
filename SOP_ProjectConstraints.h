@@ -30,9 +30,11 @@
 #ifndef __SOP_ProjectConstraints_h__
 #define __SOP_ProjectConstraints_h__
 
+#include "SOP_ProjectConstraints.proto.h"
+
 #include <SOP/SOP_Node.h>
 #include <SOP/SOP_NodeVerb.h>
-#include <UT/UT_DSOVersion.h>
+
 #include <UT/UT_StringHolder.h>
 #include <UT/UT_IStream.h>
 
@@ -43,6 +45,8 @@ using namespace UT::Literal;
 extern const UT_StringHolder attachment_type;
 extern const UT_StringHolder dist_type;
 extern const UT_StringHolder coll_type;
+extern const UT_StringHolder rod_ss_type;
+extern const UT_StringHolder rod_bt_type;
 
 class SOP_ProjectConstraintsVerb : public SOP_NodeVerb
 {
@@ -62,8 +66,8 @@ private:
                                  std::string geoName, std::string propName = "") const;
 };
 
-const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);
-const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> SOP_ProjectConstraintsVerb::theVerb;
+// const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);
+// const SOP_NodeVerb::Register<SOP_ProjectConstraintsVerb> SOP_ProjectConstraintsVerb::theVerb;
 
 class SOP_ProjectConstraints : public SOP_Node
 {
@@ -74,6 +78,7 @@ public:
     static PRM_Template *buildTemplates();
     static OP_Node		*myConstructor(OP_Network*, const char *,
 							    OP_Operator *);
+    static OP_Operator  *getOperator();
 
 protected:
     const SOP_NodeVerb *cookVerb() const override;
