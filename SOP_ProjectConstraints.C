@@ -142,6 +142,13 @@ static const char *theDsFile = R"THEDSFILE(
         type    toggle
         default { "1" }
     }
+    parm {
+        name    "debug_flag"
+        cppname "Debug"
+        label   "Debug"
+        type    toggle
+        default { "0" }
+    }
     groupcollapsible {
         name        "prop_name_folder"
         label       "Attribute Names"
@@ -516,6 +523,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     bool doColl = sopparms.getDoCollision();
     bool doStretchStrain = sopparms.getDoStretchStrain();
     bool doBendTwist = sopparms.getDoBendTwist();
+    bool debug = sopparms.getDebug();
 
     double timestep = sopparms.getTimestep();
     double inv_time_squared = 1. / (timestep * timestep);
