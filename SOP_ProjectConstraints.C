@@ -695,6 +695,13 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 propp = ppositions[targetPtoff];
                     float w = invMassHandle(targetPtoff);
 
+                    // Check if constraint is satisfied
+                    if (dot(propp - hit_p, hit_n) >= 0) {
+                        // NOTE: break doesn't work, but I think continue should?
+                        // (see https://www.sidefx.com/docs/hdk/_g_a___g_b_macros_8h.html#:~:text=%23define%20GA_FOR_ALL_PTOFF)
+                        continue;
+                    }
+
                     float s;
                     if (sopparms.getDoXpbd()) {
                         s = dot(propp - hit_p, hit_n) / (w * dot(hit_n, hit_n) + alpha);
