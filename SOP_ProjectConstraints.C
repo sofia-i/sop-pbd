@@ -445,13 +445,30 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
 
+    // FIXME: temporary default propo to 0
     GA_RWHandleV4 propoHandle(output_geo, GA_ATTRIB_POINT, propo_attr);
     if (propoHandle.isInvalid()) {
-        std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propo handle" << std::endl;
-        char buffer[100];
-        snprintf(buffer, 100, "Sim geo missing proposed orientation property named '%s'.", propo_attr.c_str());
-        cookparms.sopAddError(SOP_MESSAGE, buffer);
-        return;
+        auto propoAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, propo_attr, 4);
+        propoHandle = GA_RWHandleV4(propoAttr);
+        
+        if (propoHandle.isInvalid()) {
+            char buffer[100];
+            snprintf(buffer, 100, "Failed to create missing proposed orientation property called '%s'.", propo_attr.c_str());
+            cookparms.sopAddError(SOP_MESSAGE, buffer);
+            return;
+        }
+
+        cookparms.sopAddMessage(SOP_MESSAGE, "Missing proposed orientation value. Defaulting to 0.");
+        GA_Offset out_ptoff;
+        GA_FOR_ALL_PTOFF(constraints, out_ptoff)
+        {
+            propoHandle.set(out_ptoff, {0., 0., 0., 0.});
+        }
+        // std::cerr << "SOP_ProjectConstraints::cookMySop: Invalid propo handle" << std::endl;
+        // char buffer[100];
+        // snprintf(buffer, 100, "Sim geo missing proposed orientation property named '%s'.", propo_attr.c_str());
+        // cookparms.sopAddError(SOP_MESSAGE, buffer);
+        // return;
     }
 
     GA_RWHandleV4 orientHandle(output_geo, GA_ATTRIB_POINT, orient_attr);
