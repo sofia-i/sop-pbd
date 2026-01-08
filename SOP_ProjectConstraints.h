@@ -63,7 +63,8 @@ public:
 
 private:
     void addInvalidHandleWarning(const CookParms &cookparms, std::string handleName, 
-                                 std::string geoName, std::string propName = "") const;
+                                 std::string geoName, std::string propName = "", 
+                                 bool failure=false) const;
 };
 
 // const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);

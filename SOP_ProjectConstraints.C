@@ -364,7 +364,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
     // If constraints are empty, then return without doing anything
     if (!constraints || constraints->getNumPoints() == 0) {
-        cookparms.sopAddWarning(SOP_MESSAGE, "Constraints empty");
+        cookparms.sopAddMessage(SOP_MESSAGE, "Constraints empty");
         return;
     }
 
@@ -420,7 +420,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         }
     }
     else {
-        cookparms.sopAddWarning(SOP_MESSAGE, "Missing compliance attribute. Defaulting to 1.");
+        cookparms.sopAddMessage(SOP_MESSAGE, "Missing compliance attribute. Defaulting to 1.");
         GA_Offset constraint_ptoff;
         GA_FOR_ALL_PTOFF(constraints, constraint_ptoff)
         {
@@ -549,7 +549,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 // int target = targetHandle.get(constraint_ptoff);
                 if (targets.size() < 1) {
                     char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: expected 1 target, got %lli.", constraint_idx, targets.size());
+                    snprintf(buffer, 100, "Constraint %i: failure (expected 1 target, got %lli)", constraint_idx, targets.size());
                     cookparms.sopAddWarning(SOP_MESSAGE, buffer);
                 }
                 else {
@@ -584,10 +584,10 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     cookparms.sopAddWarning(SOP_MESSAGE, message);
                 }
                 else if (distHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "dist", "constraint");
+                    addInvalidHandleWarning(cookparms, "dist", "constraint", dist_attr.c_str(), true);
                 }
                 else if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
                 }
                 else {
                     int target = targets[0];
@@ -645,19 +645,19 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     cookparms.sopAddWarning(SOP_MESSAGE, buffer);
                 }
                 else if (hitPHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "hitP", "constraint");
+                    addInvalidHandleWarning(cookparms, "hitP", "constraint", hitP_attr.c_str(), true);
                 }
                 else if (hitNHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "hitN", "constraint");
+                    addInvalidHandleWarning(cookparms, "hitN", "constraint", hitN_attr.c_str(), true);
                 }
                 else if (hasCollidedHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "has collided", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "has collided", "Sim geo", collided_attr.c_str(), true);
                 }
                 else if (collisionNormalHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "collision normal", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "collision normal", "Sim geo", cN_attr.c_str(), true);
                 }
                 else if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
                 }
                 else {
                     int target = targets[0];
@@ -700,13 +700,13 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             else if (doStretchStrain && strcmp(type_value, rod_ss_type) == 0)
             {
                 if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
                 }
                 else if (oriInvMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation inv mass", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "orientation inv mass", "Sim geo", ori_invMass_attr.c_str(), true);
                 }
                 else if (lengthHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "length", "Sim geo");
+                    addInvalidHandleWarning(cookparms, "length", "Sim geo", length_attr.c_str(), true);
                 }
                 else {
                     int target = targets[0];
@@ -764,16 +764,16 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             else if (doBendTwist && strcmp(type_value, rod_bt_type) == 0)
             {
                 if (oriInvMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation inv mass", "sim geo");
+                    addInvalidHandleWarning(cookparms, "orientation inv mass", "sim geo", ori_invMass_attr.c_str(), true);
                 }
                 else if (orientHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation", "sim geo");
+                    addInvalidHandleWarning(cookparms, "orientation", "sim geo", orient_attr.c_str(), true);
                 }
                 else if (lengthHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "length", "sim geo");
+                    addInvalidHandleWarning(cookparms, "length", "sim geo", length_attr.c_str(), true);
                 }
                 else if (restDarbouxHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "rest darboux", "sim geo");
+                    addInvalidHandleWarning(cookparms, "rest darboux", "sim geo", rest_darboux_attr.c_str(), true);
                 }
                 else {
                     int target1 = targets[0];
@@ -859,10 +859,15 @@ void
 SOP_ProjectConstraintsVerb::addInvalidHandleWarning(const CookParms &cookparms, 
                                                     std::string handleName,
                                                     std::string geoName, 
-                                                    std::string propName) const
+                                                    std::string propName,
+                                                    bool failure) const
 {
     std::cerr << "invalid " << handleName << " handle" << std::endl;
-    std::string message = geoName + " missing " + handleName + " handle";
+    std::string message = geoName;
+    if (failure) {
+        message += " failure. ";
+    }
+    message += " missing " + handleName + " handle";
     if (!propName.empty()) {
         message += " (property named \"" + propName +  "\")";
     }
