@@ -121,11 +121,8 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     if (inputs.lock(context) >= UT_ERROR_ABORT)
         return error();
 
-    std::cerr << "enter SOP_CreateCollisionConstraints::cookMySop" << std::endl;
     const GU_Detail* sim_geo = inputGeo(0);
     const GU_Detail* coll_geo = inputGeo(1);
-
-    // duplicateSource(0, context);
 
     GU_Detail* out_geo = gdp;
     gdp->clear();
@@ -160,19 +157,6 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
         return error();
     }
 
-    // GA_ROHandleSA collGroupHandle(coll_geo, GA_ATTRIB_DETAIL, "primitivegroups");
-    // UT_StringArray collGroups;
-    // if (collGroupHandle.isValid()) {
-    //     collGroupHandle.get(GA_Offset(0), collGroups);
-    // }
-    // else {
-    //     std::cerr << "coll group handle invalid" << std::endl;
-    // }
-    
-    
-
-    std::cerr << "SOP_CreateConstraints::cook " << "before create out attributes" << std::endl;
-
     // Create point attributes
     auto typeAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, "type", 1);
     auto targetAttr = out_geo->addIntArray(GA_ATTRIB_POINT, "target", 1);
@@ -192,11 +176,12 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     UT_ASSERT(normalHandle.isValid());
     UT_ASSERT(posHandle.isValid());
 
-    std::cerr << "SOP_CreateConstraints::cook " << "passed handle assertions" << std::endl;
-
-    // GU_RayIntersect* rayIntersect = new GU_RayIntersect(coll_geo);
+    // Build the ray intersect cache
+    GU_RayIntersect *coll = new GU_RayIntersect(coll_geo);
 
     {
+        GU_RayInfo hitInfo;
+
         GA_Offset simPtoff;
         GA_FOR_ALL_PTOFF(sim_geo, simPtoff)
         {
@@ -205,74 +190,55 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
 
             int foundCollision = 0;
 
+            // check backface on ray between current position and last position
             if (checkLast) {
                 UT_Vector3 prev_x = simPrevPHandle(simPtoff);
                 UT_Vector3 dir = prev_x - x;
-                // dir.normalize();
-                // dir *= sceneSize;
+                double step_t = dir.length();
 
                 UT_Vector3 start = x;
 
-                UT_Vector3 hit_p;
-                // UT_Vector3 dir = prev_x - x;  // * sceneSize;
+                hitInfo.reset();
+                hitInfo.init(1.e18f, 0.0, GU_FIND_CLOSEST, 1.e-5);
+                int nHits = coll->sendRay(start, dir, hitInfo);
 
-                float hit_dist, hit_u, hit_v;
-                UT_Vector3 hit_pos;
-                UT_Vector3 hit_n;
-                GEO_Primitive* hit_prim = coll_geo->intersectRay(
-                    start, 
-                    dir, 
-                    1E17F,
-                    1E-12F,
-                    &hit_dist,
-                    &hit_pos,
-                    &hit_n,
-                    0,
-                    &hit_u,
-                    &hit_v
-                );
-
-                if (hit_prim && (hit_dist < dir.length())) {
-                    if (dot(hit_n, dir) > 0) {
-                        std::cerr << "add inside collision" << std::endl;
-                        foundCollision = 1;
-                        addCollConstraint(out_geo, simPtoff, hit_pos, hit_n, 
-                            targetHandle, typeHandle, posHandle, normalHandle,
-                            sourceHandle, "checkLast");
-                    }
+                if (nHits > 0 && hitInfo.myT <= step_t) {
+                    std::cerr << "Add inside collision" << std::endl;
+                    foundCollision = 1;
+                    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
+                    UT_Vector3 hit_n = hitInfo.myNml;
+                    addCollConstraint(out_geo, simPtoff, 
+                                      hit_pos, hit_n,
+                                      targetHandle, typeHandle,
+                                      posHandle, normalHandle,
+                                      sourceHandle, "checkLast");
                 }
             }
             if (!foundCollision && checkProposed) {
                 UT_Vector3 dir = p - x;
                 UT_Vector3 start = x;
+                double step_t = dir.length();
 
-                UT_Vector3 hit_pos, hit_n;
-                float hit_dist, hit_u, hit_v;
-                GEO_Primitive* hit_prim = coll_geo->intersectRay(
-                    start,
-                    dir,
-                    1E17F,
-                    1E-12F,
-                    &hit_dist,
-                    &hit_pos,
-                    &hit_n,
-                    0,
-                    &hit_u,
-                    &hit_v
-                );
+                hitInfo.reset();
+                hitInfo.init(1.e18f, 0.0, GU_FIND_CLOSEST, 1.e-5);
+                int nHits = coll->sendRay(start, dir, hitInfo);
 
-                if (hit_prim && (hit_dist < dir.length())) {
+                if (nHits > 0 && hitInfo.myT <= step_t) {
                     std::cerr << "add proposed collision" << std::endl;
                     foundCollision = 1;
-                    addCollConstraint(out_geo, simPtoff, hit_pos, hit_n,
-                        targetHandle, typeHandle, posHandle, normalHandle,
-                        sourceHandle, "checkLast");
+                    UT_Vector3 hit_n = hitInfo.myNml;
+                    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
+                    addCollConstraint(out_geo, simPtoff,
+                                      hit_pos, hit_n,
+                                      targetHandle, typeHandle,
+                                      posHandle, normalHandle,
+                                      sourceHandle, "checkLast");
                 }
             }
         }
     }
 
-    // delete rayIntersect;
+    delete coll;
 
     return error();
 }
