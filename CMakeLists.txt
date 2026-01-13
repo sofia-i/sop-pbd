@@ -16,14 +16,14 @@ set( library_name SOP_PBD )
 
 # Code generation for the embedded DS file 
 houdini_generate_proto_headers( FILES SOP_ProjectConstraints.C 
-                                      SOP_CreateConstraints.C)
+                                      SOP_CreateCollisionConstraints.C)
 
 # Add a library and its source files.
 add_library( ${library_name} SHARED
     SOP_ProjectConstraints.C
     MathUtils.C
     PBD.C
-    SOP_CreateConstraints.C
+    SOP_CreateCollisionConstraints.C
 )
 
 # Link against the Houdini libraries, and add required include directories and

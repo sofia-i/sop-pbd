@@ -27,7 +27,7 @@
  */
 
 
-#include "SOP_CreateConstraints.h"
+#include "SOP_CreateCollisionConstraints.h"
 
 #include <iostream>
 #include <GU/GU_RayIntersect.h>
@@ -95,7 +95,7 @@ static const char *theDsFile = R"THEDSFILE(
 PRM_Template *
 SOP_CreateCollisionConstraints::buildTemplates()
 {
-    static PRM_TemplateBuilder templ("SOP_CreateConstraints.C"_sh, theDsFile);
+    static PRM_TemplateBuilder templ("SOP_CreateCollisionConstraints.C"_sh, theDsFile);
     return templ.templates();
 }
 

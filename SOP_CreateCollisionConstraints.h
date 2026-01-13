@@ -23,12 +23,12 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  *----------------------------------------------------------------------------
- * Create Constraints SOP.  
+ * Create Collision Constraints SOP.  
  */
 
 
-#ifndef __SOP_CreateConstraints_h__
-#define __SOP_CreateConstraints_h__
+#ifndef __SOP_CreateCollisionConstraints_h__
+#define __SOP_CreateCollisionConstraints_h__
 
 #include <SOP/SOP_Node.h>
 #include <OP/OP_DataTypes.h>
@@ -78,4 +78,4 @@ private:
 
 } // end HDK_PBD namespace
 
-#endif // __SOP_CreateConstraints_h__
+#endif // __SOP_CreateCollisionConstraints_h__

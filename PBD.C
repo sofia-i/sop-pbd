@@ -32,7 +32,7 @@
 #include <OP/OP_OperatorTable.h>
 #include <UT/UT_DSOVersion.h>
 
-#include "SOP_CreateConstraints.h"
+#include "SOP_CreateCollisionConstraints.h"
 #include "SOP_ProjectConstraints.h"
 
 void
