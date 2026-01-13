@@ -15,15 +15,15 @@ find_package( Houdini REQUIRED )
 set( library_name SOP_PBD )
 
 # Code generation for the embedded DS file 
-houdini_generate_proto_headers( FILES SOP_ProjectConstraints.C 
-                                      SOP_CreateCollisionConstraints.C)
+houdini_generate_proto_headers( FILES SOP_ProjectConstraints.cpp
+                                      SOP_CreateCollisionConstraints.cpp)
 
 # Add a library and its source files.
 add_library( ${library_name} SHARED
-    SOP_ProjectConstraints.C
-    MathUtils.C
-    PBD.C
-    SOP_CreateCollisionConstraints.C
+    SOP_ProjectConstraints.cpp
+    MathUtils.cpp
+    PBD.cpp
+    SOP_CreateCollisionConstraints.cpp
 )
 
 # Link against the Houdini libraries, and add required include directories and
