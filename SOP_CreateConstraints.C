@@ -164,11 +164,11 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     auto sourceAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, "source", 1);
 
     // Get (output/write) attribute handles
-    GA_RWHandleS typeHandle(typeAttr);
-    GA_RWHandleS sourceHandle(sourceAttr);
-    GA_RWHandleIA targetHandle(targetAttr);
-    GA_RWHandleV3 normalHandle(normalAttr);
-    GA_RWHandleV3 posHandle(out_geo, GA_ATTRIB_POINT, "P");
+    typeHandle = GA_RWHandleS(typeAttr);
+    sourceHandle = GA_RWHandleS(sourceAttr);
+    targetHandle = GA_RWHandleIA(targetAttr);
+    normalHandle = GA_RWHandleV3(normalAttr);
+    posHandle = GA_RWHandleV3(out_geo, GA_ATTRIB_POINT, "P");
 
     UT_ASSERT(sourceHandle.isValid());
     UT_ASSERT(typeHandle.isValid());
@@ -193,46 +193,29 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
             // check backface on ray between current position and last position
             if (checkLast) {
                 UT_Vector3 prev_x = simPrevPHandle(simPtoff);
+
+                UT_Vector3 start = x;
                 UT_Vector3 dir = prev_x - x;
                 double step_t = dir.length();
+                std::string sourceType = "checkLast"; 
 
-                UT_Vector3 start = x;
-
-                hitInfo.reset();
-                hitInfo.init(1.e18f, 0.0, GU_FIND_CLOSEST, 1.e-5);
-                int nHits = coll->sendRay(start, dir, hitInfo);
-
-                if (nHits > 0 && hitInfo.myT <= step_t) {
-                    std::cerr << "Add inside collision" << std::endl;
+                bool hit = checkCollision(coll, start, dir, step_t, sourceType, hitInfo);
+                if (hit) {
                     foundCollision = 1;
-                    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
-                    UT_Vector3 hit_n = hitInfo.myNml;
-                    addCollConstraint(out_geo, simPtoff, 
-                                      hit_pos, hit_n,
-                                      targetHandle, typeHandle,
-                                      posHandle, normalHandle,
-                                      sourceHandle, "checkLast");
+                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType);
                 }
             }
+            // Check if the proposed position introduces a collision
             if (!foundCollision && checkProposed) {
-                UT_Vector3 dir = p - x;
                 UT_Vector3 start = x;
+                UT_Vector3 dir = p - x;
                 double step_t = dir.length();
+                std::string sourceType = "checkProposed";
 
-                hitInfo.reset();
-                hitInfo.init(1.e18f, 0.0, GU_FIND_CLOSEST, 1.e-5);
-                int nHits = coll->sendRay(start, dir, hitInfo);
-
-                if (nHits > 0 && hitInfo.myT <= step_t) {
-                    std::cerr << "add proposed collision" << std::endl;
+                bool hit = checkCollision(coll, start, dir, step_t, sourceType, hitInfo);
+                if (hit) {
                     foundCollision = 1;
-                    UT_Vector3 hit_n = hitInfo.myNml;
-                    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
-                    addCollConstraint(out_geo, simPtoff,
-                                      hit_pos, hit_n,
-                                      targetHandle, typeHandle,
-                                      posHandle, normalHandle,
-                                      sourceHandle, "checkLast");
+                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType);
                 }
             }
         }
@@ -243,14 +226,19 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     return error();
 }
 
+void SOP_CreateCollisionConstraints::addCollConstraintFromHit(GU_Detail* out_geo, int target, 
+                                                              UT_Vector3 start, UT_Vector3 dir, 
+                                                              GU_RayInfo hitInfo, const std::string& source)
+{
+    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
+    UT_Vector3 hit_n = hitInfo.myNml;
+    addCollConstraint(out_geo, target, hit_pos, hit_n, source);
+}
+
+
 void
 SOP_CreateCollisionConstraints::addCollConstraint(GU_Detail* out_geo, int target, 
                                                   UT_Vector3 hit_p, UT_Vector3 hit_n, 
-                                                  GA_RWHandleIA& targetHandle,
-                                                  GA_RWHandleS& typeHandle,
-                                                  GA_RWHandleV3& posHandle,
-                                                  GA_RWHandleV3& normalHandle,
-                                                  GA_RWHandleS& sourceHandle,
                                                   const std::string& source)
 {
     GA_Offset ptOffset = out_geo->appendPoint();
@@ -283,4 +271,24 @@ SOP_CreateCollisionConstraints::isRefInput(unsigned i) const
     UT_ASSERT(i >= 0);
     // First and second inputs use dotted line
     return (i == 0) || (i == 1);
+}
+
+bool SOP_CreateCollisionConstraints::checkCollision(GU_RayIntersect *coll, 
+                                                    UT_Vector3 start, UT_Vector3 dir, 
+                                                    double step_t, const std::string& source,
+                                                    GU_RayInfo &hitInfo)
+{
+    dir.normalize();
+
+    hitInfo.reset();
+    hitInfo.init(1.e18f, 0.0, GU_FIND_CLOSEST, 1.e-5);
+
+    int nHits = coll->sendRay(start, dir, hitInfo);
+
+    if (nHits > 0 && hitInfo.myT <= step_t) {
+       // std::cerr << "Found collision" << std::endl;
+        return true;
+    }
+
+    return false;
 }

@@ -34,6 +34,9 @@
 #include <OP/OP_DataTypes.h>
 // #include <SOP/SOP_NodeVerb.h>
 
+class GU_RayIntersect;
+class GU_RayInfo;
+
 namespace HDK_PBD {
 
 class SOP_CreateCollisionConstraints : public SOP_Node
@@ -57,11 +60,19 @@ protected:
 
 private:
     // void createPointAttributes(GU_Detail* out_geo);
+    bool checkCollision(GU_RayIntersect *coll, UT_Vector3 start, UT_Vector3 dir, 
+                                double step_t, const std::string& source, GU_RayInfo &hitInfo);
+    void addCollConstraintFromHit(GU_Detail* out_geo, int target, 
+                                  UT_Vector3 start, UT_Vector3 dir,
+                                  GU_RayInfo hitInfo, const std::string& source);
     void addCollConstraint(GU_Detail* out_geo, int target, UT_Vector3 hit_p,
-                           UT_Vector3 hit_n, GA_RWHandleIA& targetHandle,
-                           GA_RWHandleS& typeHandle, GA_RWHandleV3& posHandle,
-                           GA_RWHandleV3& normalHandle, GA_RWHandleS& sourceHandle,
-                           const std::string& source);
+                           UT_Vector3 hit_n, const std::string& source);
+
+    GA_RWHandleIA targetHandle;
+    GA_RWHandleS typeHandle;
+    GA_RWHandleV3 posHandle;
+    GA_RWHandleV3 normalHandle;
+    GA_RWHandleS sourceHandle;
 
 };
 
