@@ -19,6 +19,7 @@ houdini_generate_proto_headers(
     FILES   SOP_ProjectConstraints.cpp
             SOP_CreateCollisionConstraints.cpp
             SOP_CreateAttachmentConstraints.cpp
+            SOP_CreateDistanceConstraints.cpp
 )
 
 # Add a library and its source files.
@@ -28,6 +29,7 @@ add_library( ${library_name} SHARED
     PBD.cpp
     SOP_CreateCollisionConstraints.cpp
     SOP_CreateAttachmentConstraints.cpp
+    SOP_CreateDistanceConstraints.cpp
 )
 
 # Link against the Houdini libraries, and add required include directories and
