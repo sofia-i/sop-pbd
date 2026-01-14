@@ -30,6 +30,7 @@ add_library( ${library_name} SHARED
     SOP_CreateCollisionConstraints.cpp
     SOP_CreateAttachmentConstraints.cpp
     SOP_CreateDistanceConstraints.cpp
+    SOP_SolveVelocity.cpp
 )
 
 # Link against the Houdini libraries, and add required include directories and
