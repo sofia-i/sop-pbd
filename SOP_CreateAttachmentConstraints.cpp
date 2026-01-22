@@ -93,6 +93,7 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
     // Output detail
     GEO_Detail *output_geo = cookparms.gdh().gdpNC();
     UT_ASSERT(output_geo);
+    output_geo->clear();
 
     // Input detail
     const GEO_Detail *const simgeo_input = cookparms.inputGeo(0);
