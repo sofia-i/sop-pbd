@@ -136,6 +136,13 @@ static const char *theDsFile = R"THEDSFILE(
         default { "1/($FPS * chs(\"../../substep\"))" }
     }
     parm {
+        name    "distPrecision"
+        cppname "DistPrecision"
+        label   "Distance Precision"
+        type    float
+        default { "0.00001" }
+    }
+    parm {
         name    "xpbd_flag"
         cppname "doXpbd"
         label   "Do XPBD"
@@ -628,12 +635,18 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     UT_Vector3 p2 = ppositions[target2Ptoff];
 
                     UT_Vector3 diff = p1 - p2;
+                    float newDist = diff.length();
                     diff.normalize();
 
                     float w1 = invMassHandle(targetPtoff);
                     float w2 = invMassHandle(target2Ptoff);
 
-                    float distDiff = (p1 - p2).length() - dist;
+                    float distDiff = newDist - dist;
+                    if (distDiff < sopparms.getDistPrecision()) {
+                        // If distance is within precision of the value, continue.
+                        continue;
+                    }
+
                     float s;
                     if (sopparms.getDoXpbd()) {
                         s = distDiff / (w1 + w2 + alpha);
