@@ -37,6 +37,7 @@
 #include "SOP_CreateDistanceConstraints.h"
 #include "SOP_ProjectConstraints.h"
 #include "SOP_SolveVelocity.h"
+#include "SOP_CreateRodConstraints.h"
 
 void
 newSopOperator(OP_OperatorTable *table)
@@ -46,4 +47,5 @@ newSopOperator(OP_OperatorTable *table)
     table->addOperator(HDK_PBD::SOP_CreateAttachmentConstraints::getOperator());
     table->addOperator(HDK_PBD::SOP_CreateDistanceConstraints::getOperator());
     table->addOperator(HDK_PBD::SOP_SolveVelocity::getOperator());
+    table->addOperator(HDK_PBD::SOP_CreateRodConstraints::getOperator());
 }
