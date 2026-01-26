@@ -742,6 +742,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     }
                 }
             }
+            // Stretch - Strain constraint
             else if (doStretchStrain && strcmp(type_value, rod_ss_type) == 0)
             {
                 if (invMassHandle.isInvalid()) {
@@ -765,9 +766,15 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
                     UT_Vector4 q = porientations[targetPtoff];
                     
-                    float w1 = invMassHandle.get(target);
-                    float w2 = invMassHandle.get(target2);
-                    float wq = oriInvMassHandle(target);
+                    float w1 = invMassHandle.get(targetPtoff);
+                    float w2 = invMassHandle.get(target2Ptoff);
+                    float wq = oriInvMassHandle.get(targetPtoff);
+
+                    // TODO: decide epsilon
+                    if ((w1 + w2 + wq) < 1.E-5) {
+                        // All are pinned, no updates
+                        continue;
+                    }
 
                     float length = lengthHandle.get(targetPtoff);
 
@@ -779,19 +786,23 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                         s = (length) / (w1 + w2 + 4. * wq * length * length);
                     }
 
-                    UT_Vector4 e3 = {0., 0., 0., 1.};
+                    UT_Vector4 e3 = PBD::MathUtils::quatEmbed({0., 0., 1.});
                     UT_Vector3 d3 = PBD::MathUtils::quatImagPart(PBD::MathUtils::quatProd(PBD::MathUtils::quatProd(q, e3), PBD::MathUtils::quatConjugate(q)));
 
+                    UT_Vector3 c = (1. / length) * (p2 - p1) - d3;
+
                     // UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
-                    UT_Vector3 correction1 = w1 * s * ((1. / length) * (p2 - p1) - d3);
-                    UT_Vector3 correction2 = -w2 * s * ((1. / length) * (p2 - p1) - d3);
-                    UT_Vector4 correctionq = 2. * wq * length * s * PBD::MathUtils::quatProd(PBD::MathUtils::quatEmbed((1. / length) * (p2 - p1) - d3), PBD::MathUtils::quatProd(q, PBD::MathUtils::quatConjugate(e3)));
+                    UT_Vector3 correction1 = w1 * s * (c);
+                    UT_Vector3 correction2 = -w2 * s * (c);
+                    UT_Vector4 correctionq = 2. * wq * length * s * PBD::MathUtils::quatProd(PBD::MathUtils::quatEmbed(c), PBD::MathUtils::quatProd(q, PBD::MathUtils::quatConjugate(e3)));
 
                     switch (iterType) {
                         case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
                             ppositions[targetPtoff] += correction1;
                             ppositions[target2Ptoff] += correction2;
-                            porientations[targetPtoff] += correctionq;
+                            UT_Vector4 newQ = porientations[targetPtoff] + correctionq;
+                            newQ.normalize();
+                            porientations[targetPtoff] = newQ;
                             break;
                         }
                         case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
@@ -882,6 +893,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 proppHandle.set(ptoff, newPpos);
 
                 UT_Vector4 newOri = porientations[ptoff] + (1. / float(nOCorrections[ptoff])) * oCorrections[ptoff];
+                newOri.normalize();
                 propoHandle.set(ptoff, newOri);
             }
         }
