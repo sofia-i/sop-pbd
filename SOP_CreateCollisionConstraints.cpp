@@ -241,7 +241,7 @@ SOP_CreateCollisionConstraints::addCollConstraint(GU_Detail* out_geo, int target
                                                   UT_Vector3 hit_p, UT_Vector3 hit_n, 
                                                   const std::string& source)
 {
-    GA_Offset ptOffset = out_geo->appendPoint();
+    GA_Offset ptOffset = out_geo->appendPointOffset();
     UT_Int32Array targets({target});
     targetHandle.set(ptOffset, targets);
     posHandle.set(ptOffset, hit_p);

@@ -134,7 +134,7 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
             UT_Vector3 p = simPosHandle(simPtoff);
             UT_Int32Array targets({int(simPtoff)});
 
-            GA_Offset newPt = output_geo->appendPoint();
+            GA_Offset newPt = output_geo->appendPointOffset();
             typeHandle.set(newPt, "attachment");
             targetHandle.set(newPt, targets);
             posHandle.set(newPt, p);

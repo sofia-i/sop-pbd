@@ -115,7 +115,7 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
                 float dist = (p2 - p1).length();
                 UT_Int32Array targets({int(simPtoff), int(simPtoff) + 1});
 
-                GA_Offset newPt = output_geo->appendPoint();
+                GA_Offset newPt = output_geo->appendPointOffset();
                 typeHandle.set(newPt, "dist");
                 targetHandle.set(newPt, targets);
                 distHandle.set(newPt, dist);

@@ -5,6 +5,7 @@
 
 #include "SOP_CreateRodConstraints.h"
 
+#include "GEO/GEO_Primitive.h"
 #include <PRM/PRM_TemplateBuilder.h>
 #include <UT/UT_Interrupt.h>
 
@@ -90,27 +91,72 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                 int targetId = simgeo_input->pointIndex(simPtoff);
                 UT_Int32Array targets({targetId, targetId + 1});
 
-                GA_Offset newPt = output_geo->appendPoint();
+                GA_Offset newPt = output_geo->appendPointOffset();
                 typeHandle.set(newPt, "rod_ss");
                 targetHandle.set(newPt, targets);
             }
         }
     }
 
-    // Bend - Twist
+    // Sort the bend & twist constraints - bidirectional interleaving
     if (doBendTwist) {
-        GA_Offset simPtoff;
-        GA_FOR_ALL_PTOFF(simgeo_input, simPtoff)
+        const GEO_Primitive *prim = nullptr;
+        GA_Range forwardRange, backwardRange;
+        GA_Range::ordered ordered;
+        GA_FOR_ALL_PRIMITIVES(simgeo_input, prim)
         {
-            if ((simPtoff + 1) < nPoints)
-            {
-                // FIXME: ptoff or index?
-                int targetId = simgeo_input->pointIndex(simPtoff);
-                UT_Int32Array targets({targetId, targetId + 1});
+            GA_Size nPoints = prim->getPointRange().getEntries();
+            GA_Index start = 0;
+            GA_Index end = nPoints - 1;
+            // Construct forward range to ignore last two points (bend & twist on interior points)
+            forwardRange = GA_Range(simgeo_input->getPointMap(), GA_Offset(0), end);
+            backwardRange = GA_Range(forwardRange, ordered, true);
 
-                GA_Offset newPt = output_geo->appendPoint();
-                typeHandle.set(newPt, "rod_bt");
-                targetHandle.set(newPt, targets);
+            GA_Iterator fIter(forwardRange);
+            GA_Iterator bIter(backwardRange);
+
+            // make sure interleaving offset will work
+            if ((nPoints % 2) != 0) {
+                bIter.advance();
+            }
+
+            // Bilateral interleaving ordering
+            while(!(fIter.atEnd() && bIter.atEnd())) {
+                // Forward pass
+                if (!fIter.atEnd()) {
+                    int target1, target2;
+                    target1 = fIter.getIndex();
+                    fIter.advance();
+                    if (!fIter.atEnd()) {
+                        target2 = fIter.getIndex();
+                        UT_Int32Array targets({target1, target2});
+
+                        GA_Offset newPt = output_geo->appendPointOffset();
+                        typeHandle.set(newPt, "rod_bt");
+                        targetHandle.set(newPt, targets);
+
+                        // Hop forward (second advance)
+                        fIter.advance();
+                    }
+                }
+
+                // Backward pass
+                if (!bIter.atEnd()) {
+                    int target1, target2;
+                    target2 = bIter.getIndex();
+                    bIter.advance();
+                    if (!bIter.atEnd()) {
+                        target1 = bIter.getIndex();
+                        UT_Int32Array targets({target1, target2});
+
+                        GA_Offset newPt = output_geo->appendPointOffset();
+                        typeHandle.set(newPt, "rod_bt");
+                        targetHandle.set(newPt, targets);
+
+                        // Hop backward (second advance)
+                        bIter.advance();
+                    }
+                }   
             }
         }
     }
