@@ -467,7 +467,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
         cookparms.sopAddMessage(SOP_MESSAGE, "Missing proposed orientation value. Defaulting to 0.");
         GA_Offset out_ptoff;
-        GA_FOR_ALL_PTOFF(constraints, out_ptoff)
+        GA_FOR_ALL_PTOFF(output_geo, out_ptoff)
         {
             propoHandle.set(out_ptoff, {0., 0., 0., 0.});
         }
@@ -742,7 +742,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     }
                 }
             }
-            // Stretch - Strain constraint
+            // Stretch - shear constraint
             else if (doStretchStrain && strcmp(type_value, rod_ss_type) == 0)
             {
                 if (invMassHandle.isInvalid()) {
@@ -817,6 +817,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     }
                 }
             }
+            // Bend - Twist constraint
             else if (doBendTwist && strcmp(type_value, rod_bt_type) == 0)
             {
                 if (oriInvMassHandle.isInvalid()) {
@@ -838,8 +839,8 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     int target1Ptoff = output_geo->pointOffset(target1);
                     int target2Ptoff = output_geo->pointOffset(target2);
 
-                    UT_Vector4 q = orientHandle.get(target1Ptoff);
-                    UT_Vector4 u = orientHandle.get(target2Ptoff);
+                    UT_Vector4 q = porientations[target1Ptoff];
+                    UT_Vector4 u = porientations[target2Ptoff];
 
                     float w1 = oriInvMassHandle.get(target1Ptoff);
                     float w2 = oriInvMassHandle.get(target2Ptoff);
