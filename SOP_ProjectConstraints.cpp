@@ -845,6 +845,12 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                     float w1 = oriInvMassHandle.get(target1Ptoff);
                     float w2 = oriInvMassHandle.get(target2Ptoff);
 
+                    // TODO: decide epsilon
+                    if ((w1 + w2) < 1.E-5) {
+                        // All are pinned, no updates
+                        continue;
+                    }
+
                     float length = lengthHandle.get(target1Ptoff);
 
                     UT_Vector3 darboux = PBD::MathUtils::darbouxVector(q, u, length);
@@ -858,18 +864,35 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                         s = 1./ (w1 + w2);
                     }
 
+                    // Displace towards the nearest rest pose for stability
                     float t;
+                    UT_Vector3 darbouxDiff = darboux - rest_darboux;
+                    UT_Vector3 darbouxSum = darboux + rest_darboux;
+                    if (darbouxDiff.length() < darbouxSum.length()) {
+                        t = 1.;
+                    }
+                    else {
+                        t = -1.;
+                    }
 
-                    UT_Vector3 darbouxDiff = darboux - t * rest_darboux;
-                    UT_Vector4 darbouxDiffQuat = PBD::MathUtils::quatEmbed(darbouxDiff);
+                    UT_Vector4 darbouxTerm = PBD::MathUtils::quatEmbed(darboux - t * rest_darboux);
+                    // PositionBasedElasticRods.cpp::72
+                    // FIXME??
+                    // discrete darboux vector does not have vanishing scalar part
+                    // https://github.com/InteractiveComputerGraphics/PositionBasedDynamics/blob/master/PositionBasedDynamics/PositionBasedElasticRods.cpp
+                    darbouxTerm = PBD::MathUtils::quatEmbed(PBD::MathUtils::quatImagPart(darbouxTerm));
 
-                    UT_Vector4 qCorrection = s * PBD::MathUtils::quatProd(u, darbouxDiffQuat);
-                    UT_Vector4 uCorrection = -s * PBD::MathUtils::quatProd(q, darbouxDiffQuat);
+                    UT_Vector4 qCorrection = s * PBD::MathUtils::quatProd(u, darbouxTerm);
+                    UT_Vector4 uCorrection = -s * PBD::MathUtils::quatProd(q, darbouxTerm);
 
                     switch (iterType) {
                         case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            porientations[target1Ptoff] += qCorrection;
-                            porientations[target2Ptoff] += uCorrection;
+                            UT_Vector4 newQ = porientations[target1Ptoff] + qCorrection;
+                            UT_Vector4 newU = porientations[target2Ptoff] + uCorrection;
+                            newQ.normalize();
+                            newU.normalize();
+                            porientations[target1Ptoff] = newQ;
+                            porientations[target2Ptoff] = newU;
                             break;
                         }
                         case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
