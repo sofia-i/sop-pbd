@@ -74,6 +74,8 @@ private:
     GA_RWHandleV3 normalHandle;
     GA_RWHandleS sourceHandle;
 
+    UT_StringHolder typeName;
+
 };
 
 } // end HDK_PBD namespace

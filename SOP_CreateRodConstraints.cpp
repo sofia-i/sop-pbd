@@ -19,9 +19,9 @@ static const char *theDsFile = R"THEDSFILE(
 {
     name parameters
     parm {
-        name    "doStretchStrain"
-        cppname "DoStretchStrain"
-        label   "Stretch-Strain"
+        name    "doStretchShear"
+        cppname "DoStretchShear"
+        label   "Stretch-Shear"
         type    toggle
         default { "1" }
     }
@@ -31,6 +31,48 @@ static const char *theDsFile = R"THEDSFILE(
         label   "Bend-Twist"
         type    toggle
         default { "1" }
+    }
+    parm {
+        name    "stretch_type_name"
+        cppname "StretchTypeName"
+        label   "Stretch-Shear Type Name"
+        type    string
+        default { "rod_ss" }
+    }
+    parm {
+        name    "bend_type_name"
+        cppname "BendTypeName"
+        label   "Bend-Twist Type Name"
+        type    string
+        default { "rod_bt" }
+    }
+    groupcollapsible {
+        name        "prop_name_folder"
+        label       "Attributes"
+        grouptag    { "group_type" "collapsible" }
+        parmtag     { "group_default" "1" }
+
+        groupsimple {
+            name        "out_geo_attr_folder"
+            label       "Constraint Attributes"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "type_attr"
+                cppname "TypeAttributeName"
+                label   "Type"
+                type    string
+                default { "type" }
+            }
+            parm {
+                name    "target_attr"
+                cppname "TargetAttributeName"
+                label   "Target"
+                type    string
+                default { "target" }
+            }
+        }
     }
 }
 )THEDSFILE";
@@ -66,22 +108,27 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
     const GEO_Detail *const simgeo_input = cookparms.inputGeo(0);
     UT_ASSERT(simgeo_input);
 
+    // Node parameters
+    bool doStretchShear = sopparms.getDoStretchShear();
+    bool doBendTwist = sopparms.getDoBendTwist();
+
+    UT_StringHolder stretchShearTypeName = sopparms.getStretchTypeName();
+    UT_StringHolder bendTwistTypeName = sopparms.getBendTypeName();
+    UT_StringHolder typeAttrName = sopparms.getTypeAttributeName();
+    UT_StringHolder targetAttrName = sopparms.getTargetAttributeName();
+
     // Input attributes
-    // ?
     GA_Offset nPoints = simgeo_input->getNumPointOffsets();
     
     // Output attributes
-    auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, "type", 1);
-    auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, "target", 1);
+    auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
+    auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
 
     GA_RWHandleS typeHandle(typeAttr);
     GA_RWHandleIA targetHandle(targetAttr);
 
-    bool doStretchStrain = sopparms.getDoStretchStrain();
-    bool doBendTwist = sopparms.getDoBendTwist();
-
-    // Stretch - Strain
-    if (doStretchStrain) {
+    // Stretch - Shear
+    if (doStretchShear) {
         GA_Offset simPtoff;
         GA_FOR_ALL_PTOFF(simgeo_input, simPtoff)
         {
@@ -92,7 +139,7 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                 UT_Int32Array targets({targetId, targetId + 1});
 
                 GA_Offset newPt = output_geo->appendPointOffset();
-                typeHandle.set(newPt, "rod_ss");
+                typeHandle.set(newPt, stretchShearTypeName);
                 targetHandle.set(newPt, targets);
             }
         }
@@ -132,7 +179,7 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                         UT_Int32Array targets({target1, target2});
 
                         GA_Offset newPt = output_geo->appendPointOffset();
-                        typeHandle.set(newPt, "rod_bt");
+                        typeHandle.set(newPt, bendTwistTypeName);
                         targetHandle.set(newPt, targets);
 
                         // Hop forward (second advance)
@@ -150,7 +197,7 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                         UT_Int32Array targets({target1, target2});
 
                         GA_Offset newPt = output_geo->appendPointOffset();
-                        typeHandle.set(newPt, "rod_bt");
+                        typeHandle.set(newPt, bendTwistTypeName);
                         targetHandle.set(newPt, targets);
 
                         // Hop backward (second advance)

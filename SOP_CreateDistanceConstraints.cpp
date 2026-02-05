@@ -32,7 +32,63 @@ const SOP_NodeVerb::Register<SOP_CreateDistanceConstraintsVerb> SOP_CreateDistan
 
 static const char *theDsFile = R"THEDSFILE(
 {
-    name parameters
+    name    parameters
+    parm {
+        name    "type_name"
+        cppname "TypeName"
+        label   "Type Name"
+        type    string
+        default { "dist" }
+    }
+    groupcollapsible {
+        name        "prop_name_folder"
+        label       "Attributes"
+        grouptag    { "group_type" "collapsible" }
+        parmtag     { "group_default" "1" }
+
+        groupsimple {
+            name        "in_geo_attr_folder"
+            label       "Input Geo Attributes"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "pos_attr_name"
+                cppname "PositionAttributeName"
+                label   "Position"
+                type    string
+                default { "P" }
+            }
+        }
+        groupsimple {
+            name        "out_geo_attr_folder"
+            label       "Constraint Attributes"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "type_attr_name"
+                cppname "TypeAttributeName"
+                label   "Type"
+                type    string
+                default { "type" }
+            }
+            parm {
+                name    "target_attr_name"
+                cppname "TargetAttributeName"
+                label   "Target"
+                type    string
+                default { "target" }
+            }
+            parm {
+                name    "dist_attr_name"
+                cppname "DistAttributeName"
+                label   "Distance"
+                type    string
+                default { "dist" }
+            }
+        }
+    }
 }
 )THEDSFILE";
 
@@ -88,14 +144,23 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
     UT_ASSERT(simgeo_input);
 
     // Input parameters
+    UT_StringHolder typeName = sopparms.getTypeName();
+    UT_StringHolder inputPosAttrName = sopparms.getPositionAttributeName();
+    UT_StringHolder typeAttrName = sopparms.getTypeAttributeName();
+    UT_StringHolder targetAttrName = sopparms.getTargetAttributeName();
+    UT_StringHolder distAttrName = sopparms.getDistAttributeName();
 
     // Input attributes
-    GA_ROHandleV3 simPosHandle(simgeo_input, GA_ATTRIB_POINT, "P");
+    GA_ROHandleV3 simPosHandle(simgeo_input, GA_ATTRIB_POINT, inputPosAttrName);
+    if (simPosHandle.isInvalid()) {
+        cookparms.sopAddError(SOP_ATTRIBUTE_INVALID, "Invalid position handle on sim geo");
+        return;
+    }
 
     // Output attributes
-    auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, "type", 1);
-    auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, "target", 1);
-    auto distAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, "dist", 1);
+    auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
+    auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
+    auto distAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, distAttrName, 1);
 
     GA_RWHandleS typeHandle(typeAttr);
     GA_RWHandleIA targetHandle(targetAttr);
@@ -116,7 +181,7 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
                 UT_Int32Array targets({int(simPtoff), int(simPtoff) + 1});
 
                 GA_Offset newPt = output_geo->appendPointOffset();
-                typeHandle.set(newPt, "dist");
+                typeHandle.set(newPt, typeName);
                 targetHandle.set(newPt, targets);
                 distHandle.set(newPt, dist);
             }

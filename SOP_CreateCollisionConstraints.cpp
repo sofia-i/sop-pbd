@@ -38,12 +38,6 @@
 using namespace HDK_PBD;
 using namespace UT::Literal;
 
-// void
-// newSopOperator(OP_OperatorTable *table)
-// {
-//     table->addOperator();
-// }
-
 OP_Operator*
 SOP_CreateCollisionConstraints::getOperator()
 {
@@ -64,30 +58,79 @@ static const char *theDsFile = R"THEDSFILE(
     parm {
         name    "coll_type"
         cppname "CollisionType"
-        label   "Collision Type Attribute Name"
+        label   "Type Name"
         type    string
         default { "collision" }
     }
-    parm {
-        name    "pos_attr"
-        cppname "PositionAttributeName"
-        label   "Position Attribute Name"
-        type    string
-        default { "P" }
-    }
-    parm {
-        name    "proposed_pos_attr"
-        cppname "ProposedPositionAttributeName"
-        label   "Proposed Position Attribute Name"
-        type    string
-        default { "propp" }
-    }
-    parm {
-        name    "prev_pos_attr"
-        cppname "PreviousPositionAttributeName"
-        label   "Previous Position Attribute Name"
-        type    string
-        default { "prevP" }
+    groupcollapsible {
+        name        "prop_name_folder"
+        label       "Attributes"
+        grouptag    { "group_type" "collapsible" }
+        parmtag     { "group_default" "1" }
+
+        groupsimple {
+            name        "in_geo_attr_folder"
+            label       "Input Geo Attributes"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "pos_attr"
+                cppname "PositionAttributeName"
+                label   "Position"
+                type    string
+                default { "P" }
+            }
+            parm {
+                name    "proposed_pos_attr"
+                cppname "ProposedPositionAttributeName"
+                label   "Proposed Position"
+                type    string
+                default { "propp" }
+            }
+            parm {
+                name    "prev_pos_attr"
+                cppname "PreviousPositionAttributeName"
+                label   "Previous Position"
+                type    string
+                default { "prevP" }
+            }
+        }
+        groupsimple {
+            name        "out_geo_attr_folder"
+            label       "Constraint Attributes"
+            grouptag    { "group_type" "simple" }
+            parmtag     { "group_default" "1" }
+
+            parm {
+                name    "type_attr"
+                cppname "TypeAttributeName"
+                label   "Type"
+                type    string
+                default { "type" }
+            }
+            parm {
+                name    "target_attr"
+                cppname "TargetAttributeName"
+                label   "Target"
+                type    string
+                default { "target" }
+            }
+            parm {
+                name    "normal_attr"
+                cppname "NormalAttributeName"
+                label   "Normal"
+                type    string
+                default { "N" }
+            }
+            parm {
+                name    "source_attr"
+                cppname "SourceAttributeName"
+                label   "Source"
+                type    string
+                default { "source" }
+            }
+        }
     }
 }
 )THEDSFILE";
@@ -110,6 +153,8 @@ SOP_CreateCollisionConstraints::SOP_CreateCollisionConstraints(OP_Network *net, 
 {
     // TODO: uncomment if using verb
     // mySopFlags.setManagesDataIDs(true);
+
+    evalString(typeName, "coll_type", 0, 0);
 }
 
 SOP_CreateCollisionConstraints::~SOP_CreateCollisionConstraints() {}
@@ -137,12 +182,28 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     float epsilon = 1.0e-5;
     float sceneSize = 3.;
 
+    // Get node parameters
+    UT_StringHolder posAttrName;
+    UT_StringHolder propPosAttrName;
+    UT_StringHolder prevPosAttrName;
+    UT_StringHolder typeAttrName;
+    UT_StringHolder targetAttrName;
+    UT_StringHolder normalAttrName;
+    UT_StringHolder sourceAttrName;
+    evalString(posAttrName, "pos_attr", 0, context.getTime());
+    evalString(propPosAttrName, "proposed_pos_attr", 0, context.getTime());
+    evalString(prevPosAttrName, "prev_pos_attr", 0, context.getTime());
+    evalString(typeAttrName, "type_attr", 0, context.getTime());
+    evalString(targetAttrName, "target_attr", 0, context.getTime());
+    evalString(normalAttrName, "normal_attr", 0, context.getTime());
+    evalString(sourceAttrName, "source_attr", 0, context.getTime());
+
     // Get (read) attribute handles
     UT_ASSERT(sim_geo);
     UT_ASSERT(coll_geo);
-    GA_ROHandleV3 simPosHandle(sim_geo, GA_ATTRIB_POINT, "P");
-    GA_ROHandleV3 simPposHandle(sim_geo, GA_ATTRIB_POINT, "propp");
-    GA_ROHandleV3 simPrevPHandle(sim_geo, GA_ATTRIB_POINT, "prevP");
+    GA_ROHandleV3 simPosHandle(sim_geo, GA_ATTRIB_POINT, posAttrName);
+    GA_ROHandleV3 simPposHandle(sim_geo, GA_ATTRIB_POINT, propPosAttrName);
+    GA_ROHandleV3 simPrevPHandle(sim_geo, GA_ATTRIB_POINT, prevPosAttrName);
 
     if (simPosHandle.isInvalid()) {
         addError(SOP_ATTRIBUTE_INVALID, "Invalid position handle on sim geo");
@@ -158,10 +219,10 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     }
 
     // Create point attributes
-    auto typeAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, "type", 1);
-    auto targetAttr = out_geo->addIntArray(GA_ATTRIB_POINT, "target", 1);
-    auto normalAttr = out_geo->addFloatTuple(GA_ATTRIB_POINT, "N", 3);
-    auto sourceAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, "source", 1);
+    auto typeAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
+    auto targetAttr = out_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
+    auto normalAttr = out_geo->addFloatTuple(GA_ATTRIB_POINT, normalAttrName, 3);
+    auto sourceAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, sourceAttrName, 1);
 
     // Get (output/write) attribute handles
     typeHandle = GA_RWHandleS(typeAttr);
@@ -248,8 +309,7 @@ SOP_CreateCollisionConstraints::addCollConstraint(GU_Detail* out_geo, int target
     normalHandle.set(ptOffset, hit_n);
     sourceHandle.set(ptOffset, source);
 
-    // TODO: get collision name from parameter
-    typeHandle.set(ptOffset, "collision");
+    typeHandle.set(ptOffset, typeName);
 }
 
 const char *
