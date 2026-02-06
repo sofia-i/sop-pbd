@@ -62,6 +62,20 @@ static const char *theDsFile = R"THEDSFILE(
         type    string
         default { "collision" }
     }
+    parm {
+        name    "stiffness"
+        cppname "Stiffness"
+        label   "Stiffness"
+        type    float
+        default { 1.0 }
+    }
+    parm {
+        name    "compliance"
+        cppname "Compliance"
+        label   "Compliance"
+        type    float
+        default { 0.0 }
+    }
     groupcollapsible {
         name        "prop_name_folder"
         label       "Attributes"
@@ -149,7 +163,7 @@ SOP_CreateCollisionConstraints::myConstructor(OP_Network *net, const char *name,
 }
 
 SOP_CreateCollisionConstraints::SOP_CreateCollisionConstraints(OP_Network *net, const char *name, OP_Operator *op)
-    : SOP_Node(net, name, op)
+    : SOP_Node(net, name, op), nComponents(1)
 {
     // TODO: uncomment if using verb
     // mySopFlags.setManagesDataIDs(true);
@@ -172,10 +186,6 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     GU_Detail* out_geo = gdp;
     gdp->clear();
 
-    // UT_ASSERT(sim_geo);
-    // UT_ASSERT(coll_geo);
-    // UT_ASSERT(out_geo);
-
     bool checkProposed = true;
     bool checkLast = true;
 
@@ -197,6 +207,13 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     evalString(targetAttrName, "target_attr", 0, context.getTime());
     evalString(normalAttrName, "normal_attr", 0, context.getTime());
     evalString(sourceAttrName, "source_attr", 0, context.getTime());
+
+    UT_StringHolder dimensionAttrName = "dim";
+    UT_StringHolder stiffnessAttrName = "stiffness";
+    UT_StringHolder complianceAttrName = "compliance";
+    float stiffness = evalFloat("stiffness", 0, context.getTime());
+    float compliance = evalFloat("compliance", 0, context.getTime());
+    const int nComponents = 1;
 
     // Get (read) attribute handles
     UT_ASSERT(sim_geo);
@@ -223,19 +240,29 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
     auto targetAttr = out_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
     auto normalAttr = out_geo->addFloatTuple(GA_ATTRIB_POINT, normalAttrName, 3);
     auto sourceAttr = out_geo->addStringTuple(GA_ATTRIB_POINT, sourceAttrName, 1);
+    auto dimensionAttr = out_geo->addIntTuple(GA_ATTRIB_POINT, dimensionAttrName, 1);
+    auto stiffnessAttr = out_geo->addFloatTuple(GA_ATTRIB_POINT, stiffnessAttrName, 1);
+    auto complianceAttr = out_geo->addFloatArray(GA_ATTRIB_POINT, complianceAttrName, 1);
 
     // Get (output/write) attribute handles
     typeHandle = GA_RWHandleS(typeAttr);
     sourceHandle = GA_RWHandleS(sourceAttr);
     targetHandle = GA_RWHandleIA(targetAttr);
     normalHandle = GA_RWHandleV3(normalAttr);
+    dimensionHandle = GA_RWHandleI(dimensionAttr);
+    stiffnessHandle = GA_RWHandleF(stiffnessAttr);
+    complianceHandle = GA_RWHandleFA(complianceAttr);
     posHandle = GA_RWHandleV3(out_geo, GA_ATTRIB_POINT, "P");
 
+    // TODO: probably do error handling instead of asserting
     UT_ASSERT(sourceHandle.isValid());
     UT_ASSERT(typeHandle.isValid());
     UT_ASSERT(targetHandle.isValid());
     UT_ASSERT(normalHandle.isValid());
     UT_ASSERT(posHandle.isValid());
+    UT_ASSERT(dimensionHandle.isValid());
+    UT_ASSERT(stiffnessHandle.isValid());
+    UT_ASSERT(complianceHandle.isValid());
 
     // Build the ray intersect cache
     GU_RayIntersect *coll = new GU_RayIntersect(coll_geo);
@@ -263,7 +290,7 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
                 bool hit = checkCollision(coll, start, dir, step_t, sourceType, hitInfo);
                 if (hit) {
                     foundCollision = 1;
-                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType);
+                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType, stiffness, compliance);
                 }
             }
             // Check if the proposed position introduces a collision
@@ -276,7 +303,7 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
                 bool hit = checkCollision(coll, start, dir, step_t, sourceType, hitInfo);
                 if (hit) {
                     foundCollision = 1;
-                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType);
+                    addCollConstraintFromHit(out_geo, simPtoff, start, dir, hitInfo, sourceType, stiffness, compliance);
                 }
             }
         }
@@ -289,18 +316,20 @@ SOP_CreateCollisionConstraints::cookMySop(OP_Context &context)
 
 void SOP_CreateCollisionConstraints::addCollConstraintFromHit(GU_Detail* out_geo, int target, 
                                                               UT_Vector3 start, UT_Vector3 dir, 
-                                                              GU_RayInfo hitInfo, const std::string& source)
+                                                              GU_RayInfo hitInfo, const std::string& source,
+                                                              float stiffness, float compliance)
 {
     UT_Vector3 hit_pos = start + hitInfo.myT * dir;
     UT_Vector3 hit_n = hitInfo.myNml;
-    addCollConstraint(out_geo, target, hit_pos, hit_n, source);
+    addCollConstraint(out_geo, target, hit_pos, hit_n, source, stiffness, compliance);
 }
 
 
 void
 SOP_CreateCollisionConstraints::addCollConstraint(GU_Detail* out_geo, int target, 
                                                   UT_Vector3 hit_p, UT_Vector3 hit_n, 
-                                                  const std::string& source)
+                                                  const std::string& source,
+                                                  float stiffness, float compliance)
 {
     GA_Offset ptOffset = out_geo->appendPointOffset();
     UT_Int32Array targets({target});
@@ -310,6 +339,11 @@ SOP_CreateCollisionConstraints::addCollConstraint(GU_Detail* out_geo, int target
     sourceHandle.set(ptOffset, source);
 
     typeHandle.set(ptOffset, typeName);
+
+    UT_FloatArray complianceArr({compliance});
+    dimensionHandle.set(ptOffset, nComponents);
+    stiffnessHandle.set(ptOffset, stiffness);
+    complianceHandle.set(ptOffset, complianceArr);
 }
 
 const char *

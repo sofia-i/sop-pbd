@@ -18,33 +18,83 @@ const SOP_NodeVerb::Register<SOP_CreateRodConstraintsVerb> SOP_CreateRodConstrai
 static const char *theDsFile = R"THEDSFILE(
 {
     name parameters
-    parm {
-        name    "doStretchShear"
-        cppname "DoStretchShear"
-        label   "Stretch-Shear"
-        type    toggle
-        default { "1" }
+    groupsimple {
+        name        "stretch_shear_folder"
+        label       "Stretch-Shear"
+        grouptag    { "group_type" "simple" }
+        parmtag     { "group_default" "1" }
+
+        parm {
+            name    "doStretchShear"
+            cppname "DoStretchShear"
+            label   "Stretch-Shear"
+            type    toggle
+            default { "1" }
+        }
+        parm {
+            name        "stretch_type_name"
+            cppname     "StretchTypeName"
+            label       "Stretch-Shear Type Name"
+            type        string
+            default     { "rod_ss" }
+            disablewhen "{ doStretchShear == 0 }"
+        }
+        parm {
+            name        "stretch_stiffness"
+            cppname     "StretchStiffness"
+            label       "Stiffness"
+            type        float
+            default     { 1.0 }
+            disablewhen "{ doStretchShear == 0 }"
+        }
+        parm {
+            name        "stretch_compliance"
+            cppname     "StretchCompliance"
+            label       "Compliance"
+            type        vector
+            size    3
+            default { "0" "0" "0" }
+            disablewhen "{ doStretchShear == 0 }"
+        }
     }
-    parm {
-        name    "doBendTwist"
-        cppname "DoBendTwist"
-        label   "Bend-Twist"
-        type    toggle
-        default { "1" }
-    }
-    parm {
-        name    "stretch_type_name"
-        cppname "StretchTypeName"
-        label   "Stretch-Shear Type Name"
-        type    string
-        default { "rod_ss" }
-    }
-    parm {
-        name    "bend_type_name"
-        cppname "BendTypeName"
-        label   "Bend-Twist Type Name"
-        type    string
-        default { "rod_bt" }
+    groupsimple {
+        name        "bend_twist_folder"
+        label       "Bend-Twist"
+        grouptag    { "group_type" "simple" }
+        parmtag     { "group_default" "1" }
+
+        parm {
+            name    "doBendTwist"
+            cppname "DoBendTwist"
+            label   "Bend-Twist"
+            type    toggle
+            default { "1" }
+        }
+        parm {
+            name    "bend_type_name"
+            cppname "BendTypeName"
+            label   "Bend-Twist Type Name"
+            type    string
+            default { "rod_bt" }
+            disablewhen "{ doBendTwist == 0 }"
+        }
+        parm {
+            name    "bend_stiffness"
+            cppname "BendStiffness"
+            label   "Stiffness"
+            type    float
+            default { 1.0 }
+            disablewhen "{ doBendTwist == 0 }"
+        }
+        parm {
+            name    "bend_compliance"
+            cppname "BendCompliance"
+            label   "Compliance"
+            type    vector
+            size    3
+            default { "0" "0" "0" }
+            disablewhen "{ doBendTwist == 0 }"
+        }
     }
     groupcollapsible {
         name        "prop_name_folder"
@@ -111,11 +161,21 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
     // Node parameters
     bool doStretchShear = sopparms.getDoStretchShear();
     bool doBendTwist = sopparms.getDoBendTwist();
+    float stretchStiffness = sopparms.getStretchStiffness();
+    float bendStiffness = sopparms.getBendStiffness();
+    UT_Vector3F stretchCompliance = sopparms.getStretchCompliance();
+    UT_Vector3F bendCompliance = sopparms.getBendCompliance();
+    UT_FloatArray stretchComplianceArr({stretchCompliance[0], stretchCompliance[1], stretchCompliance[2]});
+    UT_FloatArray bendComplianceArr({bendCompliance[0], bendCompliance[1], bendCompliance[2]});
+    const int nComponents = 3;
 
     UT_StringHolder stretchShearTypeName = sopparms.getStretchTypeName();
     UT_StringHolder bendTwistTypeName = sopparms.getBendTypeName();
     UT_StringHolder typeAttrName = sopparms.getTypeAttributeName();
     UT_StringHolder targetAttrName = sopparms.getTargetAttributeName();
+    UT_StringHolder dimensionAttrName = "dim";
+    UT_StringHolder stiffnessAttrName = "stiffness";
+    UT_StringHolder complianceAttrName = "compliance";
 
     // Input attributes
     GA_Offset nPoints = simgeo_input->getNumPointOffsets();
@@ -123,9 +183,15 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
     // Output attributes
     auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
     auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
+    auto dimensionAttr = output_geo->addIntTuple(GA_ATTRIB_POINT, dimensionAttrName, 1);
+    auto stiffnessAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, stiffnessAttrName, 1);
+    auto complianceAttr = output_geo->addFloatArray(GA_ATTRIB_POINT, complianceAttrName, 1);
 
     GA_RWHandleS typeHandle(typeAttr);
     GA_RWHandleIA targetHandle(targetAttr);
+    GA_RWHandleI dimensionHandle(dimensionAttr);
+    GA_RWHandleF stiffnessHandle(stiffnessAttr);
+    GA_RWHandleFA complianceHandle(complianceAttr);
 
     // Stretch - Shear
     if (doStretchShear) {
@@ -141,6 +207,9 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                 GA_Offset newPt = output_geo->appendPointOffset();
                 typeHandle.set(newPt, stretchShearTypeName);
                 targetHandle.set(newPt, targets);
+                dimensionHandle.set(newPt, nComponents);
+                stiffnessHandle.set(newPt, stretchStiffness);
+                complianceHandle.set(newPt, stretchComplianceArr);
             }
         }
     }
@@ -181,6 +250,9 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                         GA_Offset newPt = output_geo->appendPointOffset();
                         typeHandle.set(newPt, bendTwistTypeName);
                         targetHandle.set(newPt, targets);
+                        dimensionHandle.set(newPt, nComponents);
+                        stiffnessHandle.set(newPt, bendStiffness);
+                        complianceHandle.set(newPt, bendComplianceArr);
 
                         // Hop forward (second advance)
                         fIter.advance();
@@ -199,6 +271,9 @@ SOP_CreateRodConstraintsVerb::cook(const CookParms &cookparms) const
                         GA_Offset newPt = output_geo->appendPointOffset();
                         typeHandle.set(newPt, bendTwistTypeName);
                         targetHandle.set(newPt, targets);
+                        dimensionHandle.set(newPt, nComponents);
+                        stiffnessHandle.set(newPt, bendStiffness);
+                        complianceHandle.set(newPt, bendComplianceArr);
 
                         // Hop backward (second advance)
                         bIter.advance();

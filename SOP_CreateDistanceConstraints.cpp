@@ -40,6 +40,20 @@ static const char *theDsFile = R"THEDSFILE(
         type    string
         default { "dist" }
     }
+    parm {
+        name    "stiffness"
+        cppname "Stiffness"
+        label   "Stiffness"
+        type    float
+        default { 1.0 }
+    }
+    parm {
+        name    "compliance"
+        cppname "Compliance"
+        label   "Compliance"
+        type    float
+        default { 0.0 }
+    }
     groupcollapsible {
         name        "prop_name_folder"
         label       "Attributes"
@@ -149,6 +163,14 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder typeAttrName = sopparms.getTypeAttributeName();
     UT_StringHolder targetAttrName = sopparms.getTargetAttributeName();
     UT_StringHolder distAttrName = sopparms.getDistAttributeName();
+    UT_StringHolder dimensionAttrName = "dim";
+    UT_StringHolder stiffnessAttrName = "stiffness";
+    UT_StringHolder complianceAttrName = "compliance";
+
+    float stiffnessValue = sopparms.getStiffness();
+    float complianceValue = sopparms.getCompliance();
+
+    const int nComponents = 3;
 
     // Input attributes
     GA_ROHandleV3 simPosHandle(simgeo_input, GA_ATTRIB_POINT, inputPosAttrName);
@@ -161,10 +183,16 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
     auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
     auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
     auto distAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, distAttrName, 1);
+    auto dimensionAttr = output_geo->addIntTuple(GA_ATTRIB_POINT, dimensionAttrName, 1);
+    auto stiffnessAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, stiffnessAttrName, 1);
+    auto complianceAttr = output_geo->addFloatArray(GA_ATTRIB_POINT, complianceAttrName, 1);
 
     GA_RWHandleS typeHandle(typeAttr);
     GA_RWHandleIA targetHandle(targetAttr);
     GA_RWHandleF distHandle(distAttr);
+    GA_RWHandleI dimensionHandle(dimensionAttr);
+    GA_RWHandleF stiffnessHandle(stiffnessAttr);
+    GA_RWHandleFA complianceHandle(complianceAttr);
     // GA_RWHandleV3 posHandle(output_geo, GA_ATTRIB_POINT, "P");
     
     GA_Offset nPoints = simgeo_input->getNumPointOffsets();
@@ -184,6 +212,11 @@ SOP_CreateDistanceConstraintsVerb::cook(const CookParms &cookparms) const
                 typeHandle.set(newPt, typeName);
                 targetHandle.set(newPt, targets);
                 distHandle.set(newPt, dist);
+
+                UT_FloatArray compliance({complianceValue});
+                dimensionHandle.set(newPt, nComponents);
+                complianceHandle.set(newPt, compliance);
+                stiffnessHandle.set(newPt, stiffnessValue);
             }
         }
     }

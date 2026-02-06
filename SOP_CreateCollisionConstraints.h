@@ -64,17 +64,23 @@ private:
                                 double step_t, const std::string& source, GU_RayInfo &hitInfo);
     void addCollConstraintFromHit(GU_Detail* out_geo, int target, 
                                   UT_Vector3 start, UT_Vector3 dir,
-                                  GU_RayInfo hitInfo, const std::string& source);
+                                  GU_RayInfo hitInfo, const std::string& source,
+                                  float stiffness, float compliance);
     void addCollConstraint(GU_Detail* out_geo, int target, UT_Vector3 hit_p,
-                           UT_Vector3 hit_n, const std::string& source);
+                           UT_Vector3 hit_n, const std::string& source,
+                           float stiffness, float compliance);
 
     GA_RWHandleIA targetHandle;
     GA_RWHandleS typeHandle;
     GA_RWHandleV3 posHandle;
     GA_RWHandleV3 normalHandle;
     GA_RWHandleS sourceHandle;
+    GA_RWHandleI dimensionHandle;
+    GA_RWHandleF stiffnessHandle;
+    GA_RWHandleFA complianceHandle;
 
     UT_StringHolder typeName;
+    const int nComponents;
 
 };
 

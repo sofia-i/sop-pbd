@@ -48,6 +48,20 @@ static const char *theDsFile = R"THEDSFILE(
         type    string
         default { "attachment" }
     }
+    parm {
+        name    "stiffness"
+        cppname "Stiffness"
+        label   "Stiffness"
+        type    float
+        default { 1.0 }
+    }
+    parm {
+        name    "compliance"
+        cppname "Compliance"
+        label   "Compliance"
+        type    float
+        default { 0.0 }
+    }
     groupcollapsible {
         name        "prop_name_folder"
         label       "Attributes"
@@ -151,8 +165,12 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
         return;
     }
 
+    const int nComponents = 3;
+
     // Input parameters
     UT_StringHolder groupNames = sopparms.getGroupNames();
+    float stiffnessValue = sopparms.getStiffness();
+    float complianceValue = sopparms.getCompliance();
 
     // Find the constrained group
     // const GA_PointGroup* constrainedGroup = simgeo_input->findPointGroup(groupNames);
@@ -170,6 +188,9 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
     UT_StringHolder inputPosAttrName = sopparms.getPositionAttributeName();
     UT_StringHolder typeAttrName = sopparms.getTypeAttributeName();
     UT_StringHolder targetAttrName = sopparms.getTargetAttributeName();
+    UT_StringHolder dimensionAttrName = "dim";
+    UT_StringHolder stiffnessAttrName = "stiffness";
+    UT_StringHolder complianceAttrName = "compliance";
 
     // Input attributes
     GA_ROHandleV3 simPosHandle(simgeo_input, GA_ATTRIB_POINT, inputPosAttrName);
@@ -181,9 +202,15 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
     // Create output attributes
     auto typeAttr = output_geo->addStringTuple(GA_ATTRIB_POINT, typeAttrName, 1);
     auto targetAttr = output_geo->addIntArray(GA_ATTRIB_POINT, targetAttrName, 1);
+    auto dimensionAttr = output_geo->addIntTuple(GA_ATTRIB_POINT, dimensionAttrName, 1);
+    auto stiffnessAttr = output_geo->addFloatTuple(GA_ATTRIB_POINT, stiffnessAttrName, 1);
+    auto complianceAttr = output_geo->addFloatArray(GA_ATTRIB_POINT, complianceAttrName, 1);
 
     GA_RWHandleS typeHandle(typeAttr);
     GA_RWHandleIA targetHandle(targetAttr);
+    GA_RWHandleI dimensionHandle(dimensionAttr);
+    GA_RWHandleF stiffnessHandle(stiffnessAttr);
+    GA_RWHandleFA complianceHandle(complianceAttr);
     GA_RWHandleV3 posHandle(output_geo, GA_ATTRIB_POINT, "P");
 
     {
@@ -197,6 +224,11 @@ SOP_CreateAttachmentConstraintsVerb::cook(const CookParms &cookparms) const
             typeHandle.set(newPt, typeName);
             targetHandle.set(newPt, targets);
             posHandle.set(newPt, p);
+
+            UT_FloatArray compliance({complianceValue, complianceValue, complianceValue});
+            dimensionHandle.set(newPt, nComponents);
+            complianceHandle.set(newPt, compliance);
+            stiffnessHandle.set(newPt, stiffnessValue);
         }
     }
 
