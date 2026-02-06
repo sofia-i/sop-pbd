@@ -164,140 +164,140 @@ static const char *theDsFile = R"THEDSFILE(
 
         groupsimple {
             name        "constr_prop_name_folder"
-            label       "Constraint Attribute Names"
+            label       "Constraint Attributes"
             grouptag    { "group_type" "simple" }
             parmtag     { "group_default" "1" }
 
             parm {
                 name    "type_attr"
                 cppname "TypeAttributeName"
-                label   "Type Attribute Name"
+                label   "Type"
                 type    string
                 default { "type" }
             }
             parm {
                 name    "compliance_attr"
                 cppname "ComplianceAttributeName"
-                label   "Compliance Attribute Name"
+                label   "Compliance"
                 type    string
                 default { "compliance" }
             }
             parm {
                 name    "target_attr"
                 cppname "TargetAttributeName"
-                label   "Target Attribute Name"
+                label   "Target"
                 type    string
                 default { "target" }
             }
             parm {
                 name    "target2_attr"
                 cppname "Target2AttributeName"
-                label   "Target 2 Attribute Name"
+                label   "Target 2"
                 type    string
                 default { "target2" }
             }
             parm {
                 name    "hitp_attr"
                 cppname "HitPAttributeName"
-                label   "Hit P Attribute Name"
+                label   "Hit P"
                 type    string
                 default { "P" }
             }
             parm {
                 name    "hitn_attr"
                 cppname "HitNAttributeName"
-                label   "Hit N Attribute Name"
+                label   "Hit N"
                 type    string
                 default { "N" }
             }
             parm {
                 name    "dist_attr"
                 cppname "DistanceAttributeName"
-                label   "Distance Attribute Name"
+                label   "Distance"
                 type    string
                 default { "dist" }
             }
         }
         groupsimple {
             name        "simgeo_prop_name_folder"
-            label       "Sim Geo Attribute Names"
+            label       "Sim Geo Attributes"
             grouptag    { "group_type" "simple" }
             parmtag     { "group_default" "1" }
 
             parm {
                 name    "invMass_attr"
                 cppname "InvMassAttributeName"
-                label   "Inv Mass Attribute Name"
+                label   "Inv Mass"
                 type    string
                 default { "invMass" }
             }
             parm {
                 name    "oriInvMass_attr"
                 cppname "OrientationInvMassAttributeName"
-                label   "Orientation Inv Mass Attribute Name"
+                label   "Orientation Inv Mass"
                 type    string
                 default { "oriInvMass" }
             }
             parm {
                 name    "length_attr"
                 cppname "LengthAttributeName"
-                label   "Length Attribute Name"
+                label   "Length"
                 type    string
                 default { "length" }
             }
             parm {
                 name    "rest_darboux"
                 cppname "RestDarbouxAttributeName"
-                label   "Rest Darboux Vector Attribute Name"
+                label   "Rest Darboux Vector"
                 type    string
                 default { "rest_darboux" }
             }
             parm {
                 name    "propp_attr"
                 cppname "ProposedPositionAttributeName"
-                label   "Proposed Position Attribute Name"
+                label   "Proposed Position"
                 type    string
                 default { "propp" }
             }
             parm {
                 name    "propo_attr"
                 cppname "ProposedOrientationAttributeName"
-                label   "Proposed Orientation Attribute Name"
+                label   "Proposed Orientation"
                 type    string
                 default { "propo" }
             }
             parm {
                 name    "orientation_attr"
                 cppname "OrientationAttributeName"
-                label   "Orientation Attribute Name"
+                label   "Orientation"
                 type    string
                 default { "orient" }
             }
             parm {
                 name    "ang_vel_attr"
                 cppname "AngularVelocityAttributeName"
-                label   "Angular Vel Attribute Name"
+                label   "Angular Vel"
                 type    string
                 default { "w" }
             }
             parm {
                 name    "inertia_mat_attr"
                 cppname "InertiaMatrixAttributeName"
-                label   "Inertia Mat Attribute Name"
+                label   "Inertia Mat"
                 type    string
                 default { "I" }
             }
             parm {
                 name    "collided_attr"
                 cppname "HasCollidedAttributeName"
-                label   "Has Collided Attribute Name"
+                label   "Has Collided"
                 type    string
                 default { "collided" }
             }
             parm {
                 name    "cN_attr"
                 cppname "CollisionNormalAttributeName"
-                label   "Collision Normal Attribute Name"
+                label   "Collision Normal"
                 type    string
                 default { "cN" }
             }
@@ -364,7 +364,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
         std::cerr << "invalid sim geo detail pointer" << std::endl;
         return;
     }
-    // UT_ASSERT(simgeo_input);
 
     // Copy input geometry into output
     output_geo->replaceWith(*simgeo_input);
@@ -372,9 +371,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     // Collect other inputs
     const GU_Detail *constraints = cookparms.inputGeo(1);
     const GU_Detail *collision = cookparms.inputGeo(2);
-
-    // UT_ASSERT(constraints);
-    // UT_ASSERT(collision);
 
     // If constraints are empty, then return without doing anything
     if (!constraints || constraints->getNumPoints() == 0) {
