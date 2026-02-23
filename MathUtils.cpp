@@ -2,7 +2,7 @@
 
 #include "MathUtils.h"
 #include "UT/UT_Vector4.h"
-#include "UT/UT_Matrix4.h"
+// #include "UT/UT_Matrix4.h"
 
 /**
  * NOTE: Quaternions in Houdini are stored x - y - z - w
@@ -55,43 +55,43 @@ UT_Vector4R MathUtils::quatConjugate(UT_Vector4R q)
 #endif
 }
 
-UT_Matrix4R MathUtils::quatMatrix(UT_Vector4R q)
-{
-#ifdef SCALAR_LAST
-    return {
-        q.w(), -q.z(), q.y(), q.x(),
-        q.z(), q.w(), -q.x(), q.y(),
-        -q.y(), q.x(), q.w(), q.z(),
-        -q.x(), -q.y(), -q.z(), q.w()
-    };
-#else
-    return {
-        q[0], -q[1], -q[2], -q[3],
-        q[1], q[0], -q[3], q[2],
-        q[2], q[3], q[0], -q[1],
-        q[3], -q[2], q[1], q[0]
-    };
-#endif
-}
+// UT_Matrix4R MathUtils::quatMatrix(UT_Vector4R q)
+// {
+// #ifdef SCALAR_LAST
+//     return {
+//         q.w(), -q.z(), q.y(), q.x(),
+//         q.z(), q.w(), -q.x(), q.y(),
+//         -q.y(), q.x(), q.w(), q.z(),
+//         -q.x(), -q.y(), -q.z(), q.w()
+//     };
+// #else
+//     return {
+//         q[0], -q[1], -q[2], -q[3],
+//         q[1], q[0], -q[3], q[2],
+//         q[2], q[3], q[0], -q[1],
+//         q[3], -q[2], q[1], q[0]
+//     };
+// #endif
+// }
 
-UT_Matrix4R MathUtils::quatMatrixHat(UT_Vector4R q)
-{
-#ifdef SCALAR_LAST
-    return {
-        q.w(), q.z(), -q.y(), q.x(),
-        -q.z(), q.w(), q.x(), q.y(),
-        q.y(), -q.x(), q.w(), q.z(),
-        -q.x(), -q.y(), -q.z(), q.w()
-    };
-#else
-    return {
-        q[0], -q[1], -q[2], -q[3],
-        q[1], q[0], q[3], -q[2],
-        q[2], -q[3], q[0], q[1],
-        q[3], q[2], -q[1], q[0]
-    };
-#endif
-}
+// UT_Matrix4R MathUtils::quatMatrixHat(UT_Vector4R q)
+// {
+// #ifdef SCALAR_LAST
+//     return {
+//         q.w(), q.z(), -q.y(), q.x(),
+//         -q.z(), q.w(), q.x(), q.y(),
+//         q.y(), -q.x(), q.w(), q.z(),
+//         -q.x(), -q.y(), -q.z(), q.w()
+//     };
+// #else
+//     return {
+//         q[0], -q[1], -q[2], -q[3],
+//         q[1], q[0], q[3], -q[2],
+//         q[2], -q[3], q[0], q[1],
+//         q[3], q[2], -q[1], q[0]
+//     };
+// #endif
+// }
 
 UT_Vector4R MathUtils::quatEmbed(UT_Vector3R v)
 {
@@ -102,28 +102,28 @@ UT_Vector4R MathUtils::quatEmbed(UT_Vector3R v)
 #endif
 }
 
-UT_Matrix3R MathUtils::outerProd(UT_Vector3R v1, UT_Vector3R v2)
-{
-    return {
-        v1[0] * v2[0],    v1[0] * v2[1],    v1[0] * v2[2],
-        v1[1] * v2[0],    v1[1] * v2[1],    v1[1] * v2[2],
-        v1[2] * v2[0],    v1[2] * v2[1],    v1[2] * v2[2]
-    };
-}
+// UT_Matrix3R MathUtils::outerProd(UT_Vector3R v1, UT_Vector3R v2)
+// {
+//     return {
+//         v1[0] * v2[0],    v1[0] * v2[1],    v1[0] * v2[2],
+//         v1[1] * v2[0],    v1[1] * v2[1],    v1[1] * v2[2],
+//         v1[2] * v2[0],    v1[2] * v2[1],    v1[2] * v2[2]
+//     };
+// }
 
-UT_Matrix3R MathUtils::skewSym(UT_Vector3R v)
-{
-    return {
-        0, -v[2], v[1],
-        v[2], 0, -v[0],
-        -v[1], v[0], 0
-    };
-}
+// UT_Matrix3R MathUtils::skewSym(UT_Vector3R v)
+// {
+//     return {
+//         0, -v[2], v[1],
+//         v[2], 0, -v[0],
+//         -v[1], v[0], 0
+//     };
+// }
 
-UT_Matrix3R MathUtils::rotation(UT_Vector3R q)
-{
-    return 2. * outerProd(q, q) + (q[0] * q[0] - dot(q, q)) * UT_Matrix3R(1.) + 2. * q[0] * skewSym(q);
-}
+// UT_Matrix3R MathUtils::rotation(UT_Vector3R q)
+// {
+//     return 2. * outerProd(q, q) + (q[0] * q[0] - dot(q, q)) * UT_Matrix3R(1.) + 2. * q[0] * skewSym(q);
+// }
 
 UT_Vector3R MathUtils::darbouxVector(UT_Vector4R q1, UT_Vector4R q2, float length)
 {

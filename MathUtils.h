@@ -9,17 +9,17 @@ class MathUtils {
 public:
     static UT_Vector3R quatImagPart(UT_Vector4R q);
     static UT_Vector4R quatConjugate(UT_Vector4R q);
-    static UT_Matrix4R quatMatrix(UT_Vector4R q);
-    static UT_Matrix4R quatMatrixHat(UT_Vector4R q);
+    // static UT_Matrix4R quatMatrix(UT_Vector4R q);
+    // static UT_Matrix4R quatMatrixHat(UT_Vector4R q);
 
     static UT_Vector4R quatEmbed(UT_Vector3R v);
 
     static UT_Vector4R quatProd(UT_Vector4R p, UT_Vector4R q);
 
-    static UT_Matrix3R outerProd(UT_Vector3R v1, UT_Vector3R v2);
-    static UT_Matrix3R skewSym(UT_Vector3R v);
+    // static UT_Matrix3R outerProd(UT_Vector3R v1, UT_Vector3R v2);
+    // static UT_Matrix3R skewSym(UT_Vector3R v);
 
-    static UT_Matrix3R rotation(UT_Vector3R q);
+    // static UT_Matrix3R rotation(UT_Vector3R q);
     
     static UT_Vector4R basisQuat(int idx);
 

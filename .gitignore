@@ -1,4 +1,7 @@
 build/*
+logs/*
 
 # IDE settings
 .vscode
+
+.DS_STORE
