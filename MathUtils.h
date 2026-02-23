@@ -24,6 +24,7 @@ public:
     static UT_Vector4R basisQuat(int idx);
 
     static UT_Vector3R darbouxVector(UT_Vector4R q1, UT_Vector4R q2, float length);
+    static UT_Vector4R darbouxQuat(UT_Vector4R q1, UT_Vector4R q2, float length);
     static UT_Vector3R deltaDarboux(UT_Vector4R q1, UT_Vector4R q2, 
                                     UT_Vector4R restQ1, UT_Vector4R restQ2, 
                                     float length);

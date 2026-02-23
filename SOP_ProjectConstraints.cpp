@@ -890,7 +890,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                         float s = (length) / (w1 + w2 + 4. * wq * length * length);
                         correction1 = w1 * s * c;
                         correction2 = -w2 * s * c;
-                        correctionq = 2. * wq * length * s * qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)));
+                        correctionq = - 2. * wq * length * s * qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)));
                     }
                     else {
                         if (doXpbd) {
@@ -903,7 +903,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                             correction1 = (w1 / length) * c * s;
                             correction2 = (-w2 / length) * c * s;
                             // correctionq = (2. * wq) * qm::quatImagPart(qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)))) * s;
-                            correctionq = (2. * wq) * qm::quatProd(qm::quatEmbed(c * s), qm::quatProd(q, qm::quatConjugate(e3)));
+                            correctionq = (-2. * wq) * qm::quatProd(qm::quatEmbed(c * s), qm::quatProd(q, qm::quatConjugate(e3)));
                         }
                         else {
                             float s = (length) / (w1 + w2 + 4. * wq * length * length);
@@ -977,31 +977,44 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
                     float length = lengthHandle.get(target1Ptoff);
 
-                    UT_Vector3 darboux = qm::darbouxVector(q, u, length);
-                    UT_Vector3 rest_darboux = restDarbouxHandle.get(target1Ptoff);
+                    UT_Vector4 darboux = qm::darbouxQuat(q, u, length);
+                    UT_Vector4 rest_darboux = qm::quatEmbed(restDarbouxHandle.get(target1Ptoff));
 
-                    // Displace towards the nearest rest pose for stability
-                    float t;
-                    UT_Vector3 darbouxDiff = darboux - rest_darboux;
-                    UT_Vector3 darbouxSum = darboux + rest_darboux;
-                    if (darbouxDiff.length() < darbouxSum.length()) {
-                        t = 1.;
+                    UT_Vector4 darbouxDiff = darboux - rest_darboux;
+                    UT_Vector4 darbouxSum = darboux + rest_darboux;
+
+                    UT_Vector4 darbouxTerm;
+
+                    if (darbouxDiff.length() > darbouxSum.length()) {
+                        darbouxTerm = darbouxSum;
                     }
                     else {
-                        t = -1.;
+                        darbouxTerm = darbouxDiff;
                     }
+
+                    // Displace towards the nearest rest pose for stability
+                    // float t;
+                    // UT_Vector3 darbouxDiff = darboux - rest_darboux;
+                    // UT_Vector3 darbouxSum = darboux + rest_darboux;
+                    // if (darbouxDiff.length() < darbouxSum.length()) {
+                    //     t = 1.;
+                    // }
+                    // else {
+                    //     t = -1.;
+                    // }
 
                     // discrete darboux vector does not have vanishing scalar part, so get rid of it
                     // ref: PositionBasedElasticRods.cpp::72, https://github.com/InteractiveComputerGraphics/PositionBasedDynamics/blob/master/PositionBasedDynamics/PositionBasedElasticRods.cpp
-                    UT_Vector3 darbouxTerm = qm::quatImagPart(qm::quatEmbed(darboux - t * rest_darboux));
+                    // UT_Vector3 darbouxTerm = qm::quatImagPart(qm::quatEmbed(darboux - t * rest_darboux));
+                    darbouxTerm.w() = 0;
 
                     UT_Vector4 qCorrection, uCorrection;
 
                     if (doIgnoreStiffness) {
                         float s = 1./ (wq + wu);
-                        UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
-                        qCorrection = s * qm::quatProd(u, darbouxTerm_quat);
-                        uCorrection = s * qm::quatProd(q, darbouxTerm_quat);
+                        // UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
+                        qCorrection = s * qm::quatProd(u, darbouxTerm);
+                        uCorrection = s * qm::quatProd(q, darbouxTerm);
                     }
                     else {
                         if (doXpbd) {
@@ -1010,7 +1023,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                                 0., 1 / (wq + wu + compliance[1]), 0.,
                                 0., 0., 1 / (wq + wu + compliance[3])
                             };
-                            UT_Vector3 sDarbouxTerm = darbouxTerm * s;
+                            UT_Vector3 sDarbouxTerm = qm::quatImagPart(darbouxTerm) * s;
                             UT_Vector4 sDarbouxTerm_quat = qm::quatEmbed(sDarbouxTerm);
                             qCorrection = wq * qm::quatProd(u, sDarbouxTerm_quat);
                             uCorrection = -wu * qm::quatProd(q, sDarbouxTerm_quat);
@@ -1019,9 +1032,9 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                             float s = 1./ (wq + wu);
                             // apply stiffness
                             s *= 1. - pow(1. - stiffness, (1. / nIterations));
-                            UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
-                            qCorrection = s * qm::quatProd(u, darbouxTerm_quat);
-                            uCorrection = s * qm::quatProd(q, darbouxTerm_quat);
+                            // UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
+                            qCorrection = wq * s * qm::quatProd(u, darbouxTerm);
+                            uCorrection = -wu * s * qm::quatProd(q, darbouxTerm);
                         }
                     }
 

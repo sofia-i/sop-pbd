@@ -127,7 +127,12 @@ UT_Vector4R MathUtils::quatEmbed(UT_Vector3R v)
 
 UT_Vector3R MathUtils::darbouxVector(UT_Vector4R q1, UT_Vector4R q2, float length)
 {
-    return (2. / length) * quatImagPart(quatProd(quatConjugate(q1), q2));
+    return /* (2. / length) * */ quatImagPart(quatProd(quatConjugate(q1), q2));
+}
+
+UT_Vector4R MathUtils::darbouxQuat(UT_Vector4R q1, UT_Vector4R q2, float length)
+{
+    return /* (2. / length) * */ quatProd(quatConjugate(q1), q2);
 }
 
  UT_Vector4R MathUtils::basisQuat(int idx)
