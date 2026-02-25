@@ -65,6 +65,29 @@ private:
     void addInvalidHandleWarning(const CookParms &cookparms, std::string handleName, 
                                  std::string geoName, std::string propName = "", 
                                  bool failure=false) const;
+
+    bool validateConstraint(const UT_Int32Array& targets, const UT_FloatArray& compliance, int nTargets,
+        bool doIgnoreStiffness, bool doXpbd, int nComponents, int constraint_idx, const CookParms &cookparms) const;
+    bool validateAttachmentConstraint(const CookParms &cookparms) const;
+    bool validateDistanceConstraint(
+        const GA_ROHandleD& distHandle, const GA_ROHandleD& invMassHandle, 
+        const std::string& dist_attr, const std::string& invMass_attr,
+        const CookParms &cookparms) const;
+    bool validateCollisionConstraint(
+        const GA_ROHandleV3& hitPHandle, const GA_ROHandleV3& hitNHandle, const GA_RWHandleI& hasCollidedHandle,
+        const GA_ROHandleV3& collisionNormalHandle, const GA_ROHandleD& invMassHandle,
+        const std::string& hitP_attr, const std::string& hitN_attr, const std::string& collided_attr,
+        const std::string& cN_attr, const std::string& invMass_attr,
+        const CookParms &cookparms) const;
+    bool validateStretchShearConstraint(
+        const GA_ROHandleD& invMassHandle, const GA_ROHandleD& oriInvMassHandle, const GA_ROHandleD& lengthHandle,
+        const std::string& invMass_attr, const std::string& ori_invMass_attr, const std::string& length_attr,
+        const CookParms &cookparms) const;
+    bool validateBendTwistConstraint(
+        const GA_ROHandleD& oriInvMassHandle, const GA_ROHandleD& lengthHandle, const GA_RWHandleV4& orientHandle,
+        const GA_ROHandleV3& restDarbouxHandle,
+        const std::string& ori_invMass_attr,  const std::string& orient_attr,  const std::string& length_attr,  const std::string& rest_darboux_attr,
+        const CookParms &cookparms) const;
 };
 
 // const UT_StringHolder SOP_ProjectConstraintsVerb::theSOPTypeName("hdk_projectconstraints"_sh);

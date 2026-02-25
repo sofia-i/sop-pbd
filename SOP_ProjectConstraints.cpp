@@ -28,6 +28,11 @@
 
 #include "SOP_ProjectConstraints.h"
 #include "MathUtils.h"
+#include "src/AttachmentConstraint.h"
+#include "src/BendTwistConstraint.h"
+#include "src/CollisionConstraint.h"
+#include "src/DistanceConstraint.h"
+#include "src/StretchShearConstraint.h"
 
 #include <GU/GU_Detail.h>
 #include <OP/OP_AutoLockInputs.h>
@@ -629,432 +634,216 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
             // Attachment Constraint
             if (doAttachment && strcmp(type_value, attachment_type) == 0)
             {
-                if (targets.size() < 1) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected 1 target, got %lli)", constraint_idx, targets.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else {
-                    int target = targets[0];
-                    int targetPtoff = output_geo->pointOffset(target);
+                int nTargets = 1;
+                if(!validateConstraint(targets, compliance, nTargets, doIgnoreStiffness, doXpbd, nComponents, constraint_idx, cookparms) || 
+                        !validateAttachmentConstraint(cookparms))
+                    continue;
 
-                    // Calculate constraint correction
-                    UT_Vector3 location = constraints->getPos3(constraint_ptoff);
-                    UT_Vector3 propp = ppositions[targetPtoff];
+                int target = targets[0];
+                int targetPtoff = output_geo->pointOffset(target);
 
-                    UT_Vector3 correction = location - propp;
+                // Calculate constraint correction
+                UT_Vector3 location = constraints->getPos3(constraint_ptoff);
+                UT_Vector3 propp = ppositions[targetPtoff];
 
-                    if (!doIgnoreStiffness) {
-                        if (doXpbd) {
-                            // dx = (I_3 + ~alpha)^(-1) * correction
-                            correction[0] *= 1. / (1. + compliance[0]);
-                            correction[1] *= 1. / (1. + compliance[1]);
-                            correction[2] *= 1. / (1. + compliance[2]);
-                        }
-                        else {
-                            // multiply by k' (based on PBD)
-                            correction *= 1. - pow(1. - stiffness, (1. / nIterations));
-                        }
+                UT_Vector3F correction;
+                AttachmentConstraint::solve(propp, location, compliance, doXpbd, correction, stiffness, nIterations);
+
+                // Apply constraint correction
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        ppositions[targetPtoff] += correction;
+                        break;
                     }
-
-                    // Apply constraint correction
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            ppositions[targetPtoff] += correction;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            corrections[targetPtoff] += correction;
-                            nCorrections[targetPtoff] += 1;
-                        }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        corrections[targetPtoff] += correction;
+                        nCorrections[targetPtoff] += 1;
                     }
                 }
             }
             // Distance Constraint
             else if (doDist && strcmp(type_value, dist_type) == 0)
             {
-                if (targets.size() < 2) {
-                    char message[100];
-                    snprintf(message, 100, "Unable to process dist constraint. Targets: expected: %i, got %lli.", 2, targets.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, message);
-                }
-                else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (distHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "dist", "constraint", dist_attr.c_str(), true);
-                }
-                else if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
-                }
-                else {
-                    int target = targets[0];
-                    int target2 = targets[1];
+                if (!validateConstraint(targets, compliance, 2, doIgnoreStiffness, doXpbd, nComponents, constraint_idx, cookparms) ||
+                    !validateDistanceConstraint(distHandle, invMassHandle, dist_attr.c_str(), invMass_attr.c_str(), cookparms))
+                    continue;
+                
+                int target = targets[0];
+                int target2 = targets[1];
+                int targetPtoff = output_geo->pointOffset(target);
+                int target2Ptoff = output_geo->pointOffset(target2);
 
-                    int targetPtoff = output_geo->pointOffset(target);
-                    int target2Ptoff = output_geo->pointOffset(target2);
+                // Get point information
+                float dist = distHandle.get(constraint_ptoff);
+                UT_Vector3 p1 = ppositions[targetPtoff];
+                UT_Vector3 p2 = ppositions[target2Ptoff];
+                float w1 = invMassHandle(targetPtoff);
+                float w2 = invMassHandle(target2Ptoff);
 
-                    // Calculate constraint corrections
-                    float dist = distHandle.get(constraint_ptoff);
+                UT_Vector3F correction1;
+                UT_Vector3F correction2;
+                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
+                
+                DistanceConstraint::solve(p1, p2, dist, w1, w2, stiffMode, stiffness, compliance, nIterations, correction1, correction2);
 
-                    UT_Vector3 p1 = ppositions[targetPtoff];
-                    UT_Vector3 p2 = ppositions[target2Ptoff];
-
-                    UT_Vector3 diff = p1 - p2;
-                    float newDist = diff.length();
-                    diff.normalize();
-
-                    float w1 = invMassHandle(targetPtoff);
-                    float w2 = invMassHandle(target2Ptoff);
-
-                    float distDiff = newDist - dist;
-                    if (distDiff < sopparms.getDistPrecision()) {
-                        // If distance is within precision of the value, continue.
-                        continue;
+                // Apply constraint corrections
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        ppositions[targetPtoff] += correction1;
+                        ppositions[target2Ptoff] += correction2;
+                        break;
                     }
-
-                    float s;
-                    if (doIgnoreStiffness) {
-                        s = (distDiff / (w1 + w2));
-                    }
-                    else {
-                        if (doXpbd) {
-                            s = distDiff / (w1 + w2 + compliance[0]);
-                        }
-                        else {
-                            s = (distDiff / (w1 + w2));
-                            // apply stiffness
-                            s *= 1. - pow(1. - stiffness, (1. / nIterations));
-                        }
-                    }
-
-                    UT_Vector3 correction1 = -diff * w1 * s;
-                    UT_Vector3 correction2 = diff * w2 * s;
-
-                    // Apply constraint corrections
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            ppositions[targetPtoff] += correction1;
-                            ppositions[target2Ptoff] += correction2;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            corrections[targetPtoff] += correction1;
-                            corrections[target2Ptoff] += correction2;
-                            nCorrections[targetPtoff] += 1;
-                            nCorrections[target2Ptoff] += 1;
-                        }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        corrections[targetPtoff] += correction1;
+                        corrections[target2Ptoff] += correction2;
+                        nCorrections[targetPtoff] += 1;
+                        nCorrections[target2Ptoff] += 1;
                     }
                 }
             }
             // Collision Constraint
             else if (doColl && strcmp(type_value, coll_type) == 0)
             {
-                if (targets.size() < 1) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: expected 1 target, got %lli.", constraint_idx, targets.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (hitPHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "hitP", "constraint", hitP_attr.c_str(), true);
-                }
-                else if (hitNHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "hitN", "constraint", hitN_attr.c_str(), true);
-                }
-                else if (hasCollidedHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "has collided", "Sim geo", collided_attr.c_str(), true);
-                }
-                else if (collisionNormalHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "collision normal", "Sim geo", cN_attr.c_str(), true);
-                }
-                else if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
-                }
-                else {
-                    int target = targets[0];
-                    int targetPtoff = output_geo->pointOffset(target);
+                if (!validateConstraint(targets, compliance, 1, doIgnoreStiffness, doXpbd, nComponents, constraint_idx, cookparms) |
+                    !validateCollisionConstraint(
+                        hitPHandle, hitNHandle, hasCollidedHandle, collisionNormalHandle, invMassHandle, 
+                        hitP_attr.c_str(), hitN_attr.c_str(), collided_attr.c_str(), cN_attr.c_str(), invMass_attr.c_str(), 
+                        cookparms))
+                    continue;
 
-                    // Calculate constraint correction
-                    UT_Vector3 hit_p = hitPHandle.get(constraint_ptoff);
-                    UT_Vector3 hit_n = hitNHandle.get(constraint_ptoff);
-                    // hit normal should be normalized, right? this is important for the correction calculation
-                    UT_ASSERT(hit_n.length() - 1. < FLT_EPSILON);
+                // Get target
+                int target = targets[0];
+                int targetPtoff = output_geo->pointOffset(target);
 
-                    UT_Vector3 propp = ppositions[targetPtoff];
-                    float w = invMassHandle(targetPtoff);
+                // Get target information
+                UT_Vector3 hit_p = hitPHandle.get(constraint_ptoff);
+                UT_Vector3 hit_n = hitNHandle.get(constraint_ptoff);
+                UT_Vector3 propp = ppositions[targetPtoff];
+                float w = invMassHandle(targetPtoff);
 
-                    // Check if constraint is satisfied
-                    if (dot(propp - hit_p, hit_n) >= 0) {
-                        // NOTE: break doesn't work, but I think continue should?
-                        // (see https://www.sidefx.com/docs/hdk/_g_a___g_b_macros_8h.html#:~:text=%23define%20GA_FOR_ALL_PTOFF)
-                        continue;
+                UT_Vector3F correction;
+                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
+                CollisionConstraint::solve(hit_p, hit_n, propp, w, stiffMode, stiffness, compliance, nIterations, correction);
+
+                hasCollidedHandle.set(targetPtoff, 1);
+                collisionNormalHandle.set(targetPtoff, hit_n);
+
+                // Apply constraint correction
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        ppositions[targetPtoff] += correction;
+                        break;
                     }
-
-                    float s;
-                    if (doIgnoreStiffness) {
-                        s = dot(propp - hit_p, hit_n) / (w);
-                    }
-                    else {
-                        if (sopparms.getDoXpbd()) {
-                            s = dot(propp - hit_p, hit_n) / (w + compliance[0]);
-                        }
-                        else {
-                            s = dot(propp - hit_p, hit_n) / (w);
-                            // apply stiffness
-                            s *= 1. - pow(1. - stiffness, (1. / nIterations));
-                        }
-                    }
-
-                    // UT_Vector3 correction = -hit_n * dot(hit_n, propp - hit_p) / dot(hit_n, hit_n);
-                    UT_Vector3 correction = -s * w * hit_n;
-
-                    hasCollidedHandle.set(targetPtoff, 1);
-                    collisionNormalHandle.set(targetPtoff, hit_n);
-
-                    // Apply constraint correction
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            ppositions[targetPtoff] += correction;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            corrections[targetPtoff] += correction;
-                            nCorrections[targetPtoff] += 1;
-                        }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        corrections[targetPtoff] += correction;
+                        nCorrections[targetPtoff] += 1;
                     }
                 }
             }
             // Stretch - shear constraint
             else if (doStretchStrain && strcmp(type_value, rod_ss_type) == 0)
             {
-                if (invMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
-                }
-                else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (oriInvMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation inv mass", "Sim geo", ori_invMass_attr.c_str(), true);
-                }
-                else if (lengthHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "length", "Sim geo", length_attr.c_str(), true);
-                }
-                else {
-                    int target = targets[0];
-                    int target2 = targets[1];
+                if (!validateConstraint(targets, compliance, 2, doIgnoreStiffness, doXpbd, nComponents, constraint_idx, cookparms) ||
+                    !validateStretchShearConstraint(invMassHandle, oriInvMassHandle, lengthHandle, 
+                        invMass_attr.c_str(), ori_invMass_attr.c_str(), length_attr.c_str(), cookparms))
+                    continue;
 
-                    int targetPtoff = output_geo->pointOffset(target);
-                    int target2Ptoff = output_geo->pointOffset(target2);
+                // Get targets
+                int target = targets[0];
+                int target2 = targets[1];
+                int targetPtoff = output_geo->pointOffset(target);
+                int target2Ptoff = output_geo->pointOffset(target2);
 
-                    UT_Vector3 p1 = ppositions[targetPtoff];
-                    UT_Vector3 p2 = ppositions[target2Ptoff];
+                // Get target properties
+                UT_Vector3 p1 = ppositions[targetPtoff];
+                UT_Vector3 p2 = ppositions[target2Ptoff];
+                UT_Vector4 q = porientations[targetPtoff];
+                float w1 = invMassHandle.get(targetPtoff);
+                float w2 = invMassHandle.get(target2Ptoff);
+                float wq = oriInvMassHandle.get(targetPtoff);
+                float length = lengthHandle.get(targetPtoff);
 
-                    UT_Vector4 q = porientations[targetPtoff];
-                    
-                    float w1 = invMassHandle.get(targetPtoff);
-                    float w2 = invMassHandle.get(target2Ptoff);
-                    float wq = oriInvMassHandle.get(targetPtoff);
+                // TODO: decide epsilon
+                if ((w1 + w2 + wq) < 1.E-5) {
+                    // All are pinned, no updates
+                    continue;
+                }
 
-                    // TODO: decide epsilon
-                    if ((w1 + w2 + wq) < 1.E-5) {
-                        // All are pinned, no updates
-                        continue;
+                UT_Vector3F correction1, correction2;
+                UT_Vector4F correctionq;
+                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
+                StretchShearConstraint::solve(p1, p2, q, w1, w2, wq, length, stiffMode, stiffness, compliance, nIterations, correction1, correction2, correctionq);
+
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        ppositions[targetPtoff] += correction1;
+                        ppositions[target2Ptoff] += correction2;
+                        UT_Vector4 newQ = porientations[targetPtoff] + correctionq;
+                        newQ.normalize();
+                        porientations[targetPtoff] = newQ;
+                        break;
                     }
-
-                    float length = lengthHandle.get(targetPtoff);
-
-                    UT_Vector4 e3 = qm::quatEmbed({0., 0., 1.});
-                    UT_Vector3 d3 = qm::quatImagPart(qm::quatProd(qm::quatProd(q, e3), qm::quatConjugate(q)));
-
-                    UT_Vector3 c = (1. / length) * (p2 - p1) - d3;
-
-                    UT_Vector3 correction1, correction2;
-                    UT_Vector4 correctionq;
-
-                    // float s;
-                    if (doIgnoreStiffness) {
-                        float s = (length) / (w1 + w2 + 4. * wq * length * length);
-                        correction1 = w1 * s * c;
-                        correction2 = -w2 * s * c;
-                        correctionq = - 2. * wq * length * s * qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)));
-                    }
-                    else {
-                        if (doXpbd) {
-                            float lengthSq = length * length;
-                            UT_Matrix3 s = {
-                                lengthSq / (w1 + w2 + 4 * wq * lengthSq + lengthSq * compliance[0]), 0., 0.,
-                                0., lengthSq / (w1 + w2 + 4 * wq * lengthSq + lengthSq * compliance[1]), 0.,
-                                0., 0., lengthSq / (w1 + w2 + 4 * wq * lengthSq + lengthSq * compliance[2])
-                            };
-                            correction1 = (w1 / length) * c * s;
-                            correction2 = (-w2 / length) * c * s;
-                            // correctionq = (2. * wq) * qm::quatImagPart(qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)))) * s;
-                            correctionq = (-2. * wq) * qm::quatProd(qm::quatEmbed(c * s), qm::quatProd(q, qm::quatConjugate(e3)));
-                        }
-                        else {
-                            float s = (length) / (w1 + w2 + 4. * wq * length * length);
-                            // apply stiffness
-                            s *= 1. - pow(1. - stiffness, (1. / nIterations));
-                            correction1 = w1 * s * c;
-                            correction2 = -w2 * s * c;
-                            correctionq = 2. * wq * length * s * qm::quatProd(qm::quatEmbed(c), qm::quatProd(q, qm::quatConjugate(e3)));
-                        }
-                    }
-
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            ppositions[targetPtoff] += correction1;
-                            ppositions[target2Ptoff] += correction2;
-                            UT_Vector4 newQ = porientations[targetPtoff] + correctionq;
-                            newQ.normalize();
-                            porientations[targetPtoff] = newQ;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            corrections[targetPtoff] += correction1;
-                            corrections[target2Ptoff] += correction2;
-                            oCorrections[targetPtoff] += correctionq;
-                            nCorrections[targetPtoff] += 1;
-                            nCorrections[target2Ptoff] += 1;
-                            nOCorrections[targetPtoff] += 1;
-                            break;
-                        }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        corrections[targetPtoff] += correction1;
+                        corrections[target2Ptoff] += correction2;
+                        oCorrections[targetPtoff] += correctionq;
+                        nCorrections[targetPtoff] += 1;
+                        nCorrections[target2Ptoff] += 1;
+                        nOCorrections[targetPtoff] += 1;
+                        break;
                     }
                 }
             }
             // Bend - Twist constraint
             else if (doBendTwist && strcmp(type_value, rod_bt_type) == 0)
             {
-                if (oriInvMassHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation inv mass", "sim geo", ori_invMass_attr.c_str(), true);
+                if (!validateConstraint(targets, compliance, 2, doIgnoreStiffness, doXpbd, nComponents, constraint_idx, cookparms) ||
+                    !validateBendTwistConstraint(oriInvMassHandle, lengthHandle, orientHandle, restDarbouxHandle,
+                        ori_invMass_attr.c_str(), orient_attr.c_str(), length_attr.c_str(), rest_darboux_attr.c_str(),
+                        cookparms))
+                    continue;
+
+                // Get targets
+                int target1 = targets[0];
+                int target2 = targets[1];
+                int target1Ptoff = output_geo->pointOffset(target1);
+                int target2Ptoff = output_geo->pointOffset(target2);
+
+                // Get target information
+                UT_Vector4 q = porientations[target1Ptoff];
+                UT_Vector4 u = porientations[target2Ptoff];
+                float wq = oriInvMassHandle.get(target1Ptoff);
+                float wu = oriInvMassHandle.get(target2Ptoff);
+                float length = lengthHandle.get(target1Ptoff);
+                UT_Vector4 rest_darboux = qm::quatEmbed(restDarbouxHandle.get(target1Ptoff));
+
+                // TODO: decide epsilon
+                if ((wq + wu) < 1.E-5) {
+                    // All are pinned, no updates
+                    continue;
                 }
-                else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
-                    char buffer[100];
-                    snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
-                    cookparms.sopAddWarning(SOP_MESSAGE, buffer);
-                }
-                else if (orientHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "orientation", "sim geo", orient_attr.c_str(), true);
-                }
-                else if (lengthHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "length", "sim geo", length_attr.c_str(), true);
-                }
-                else if (restDarbouxHandle.isInvalid()) {
-                    addInvalidHandleWarning(cookparms, "rest darboux", "sim geo", rest_darboux_attr.c_str(), true);
-                }
-                else {
-                    int target1 = targets[0];
-                    int target2 = targets[1];
 
-                    int target1Ptoff = output_geo->pointOffset(target1);
-                    int target2Ptoff = output_geo->pointOffset(target2);
 
-                    UT_Vector4 q = porientations[target1Ptoff];
-                    UT_Vector4 u = porientations[target2Ptoff];
+                UT_Vector4 correctionq, correctionu;
+                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
+                BendTwistConstraint::solve(q, u, wq, wu, length, rest_darboux, stiffMode, stiffness, nIterations, compliance, correctionq, correctionu);
 
-                    float wq = oriInvMassHandle.get(target1Ptoff);
-                    float wu = oriInvMassHandle.get(target2Ptoff);
-
-                    // TODO: decide epsilon
-                    if ((wq + wu) < 1.E-5) {
-                        // All are pinned, no updates
-                        continue;
+                switch (iterType) {
+                    case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
+                        UT_Vector4 newQ = porientations[target1Ptoff] + correctionq;
+                        UT_Vector4 newU = porientations[target2Ptoff] + correctionu;
+                        newQ.normalize();
+                        newU.normalize();
+                        porientations[target1Ptoff] = newQ;
+                        porientations[target2Ptoff] = newU;
+                        break;
                     }
-
-                    float length = lengthHandle.get(target1Ptoff);
-
-                    UT_Vector4 darboux = qm::darbouxQuat(q, u, length);
-                    UT_Vector4 rest_darboux = qm::quatEmbed(restDarbouxHandle.get(target1Ptoff));
-
-                    UT_Vector4 darbouxDiff = darboux - rest_darboux;
-                    UT_Vector4 darbouxSum = darboux + rest_darboux;
-
-                    UT_Vector4 darbouxTerm;
-
-                    if (darbouxDiff.length() > darbouxSum.length()) {
-                        darbouxTerm = darbouxSum;
-                    }
-                    else {
-                        darbouxTerm = darbouxDiff;
-                    }
-
-                    // Displace towards the nearest rest pose for stability
-                    // float t;
-                    // UT_Vector3 darbouxDiff = darboux - rest_darboux;
-                    // UT_Vector3 darbouxSum = darboux + rest_darboux;
-                    // if (darbouxDiff.length() < darbouxSum.length()) {
-                    //     t = 1.;
-                    // }
-                    // else {
-                    //     t = -1.;
-                    // }
-
-                    // discrete darboux vector does not have vanishing scalar part, so get rid of it
-                    // ref: PositionBasedElasticRods.cpp::72, https://github.com/InteractiveComputerGraphics/PositionBasedDynamics/blob/master/PositionBasedDynamics/PositionBasedElasticRods.cpp
-                    // UT_Vector3 darbouxTerm = qm::quatImagPart(qm::quatEmbed(darboux - t * rest_darboux));
-                    darbouxTerm.w() = 0;
-
-                    UT_Vector4 qCorrection, uCorrection;
-
-                    if (doIgnoreStiffness) {
-                        float s = 1./ (wq + wu);
-                        // UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
-                        qCorrection = s * qm::quatProd(u, darbouxTerm);
-                        uCorrection = s * qm::quatProd(q, darbouxTerm);
-                    }
-                    else {
-                        if (doXpbd) {
-                            UT_Matrix3F s = {
-                                1 / (wq + wu + compliance[0]), 0., 0.,
-                                0., 1 / (wq + wu + compliance[1]), 0.,
-                                0., 0., 1 / (wq + wu + compliance[3])
-                            };
-                            UT_Vector3 sDarbouxTerm = qm::quatImagPart(darbouxTerm) * s;
-                            UT_Vector4 sDarbouxTerm_quat = qm::quatEmbed(sDarbouxTerm);
-                            qCorrection = wq * qm::quatProd(u, sDarbouxTerm_quat);
-                            uCorrection = -wu * qm::quatProd(q, sDarbouxTerm_quat);
-                        }
-                        else {
-                            float s = 1./ (wq + wu);
-                            // apply stiffness
-                            s *= 1. - pow(1. - stiffness, (1. / nIterations));
-                            // UT_Vector4 darbouxTerm_quat = qm::quatEmbed(darbouxTerm);
-                            qCorrection = wq * s * qm::quatProd(u, darbouxTerm);
-                            uCorrection = -wu * s * qm::quatProd(q, darbouxTerm);
-                        }
-                    }
-
-                    switch (iterType) {
-                        case (SOP_ProjectConstraintsEnums::IterationType::GAUSS): {
-                            UT_Vector4 newQ = porientations[target1Ptoff] + qCorrection;
-                            UT_Vector4 newU = porientations[target2Ptoff] + uCorrection;
-                            newQ.normalize();
-                            newU.normalize();
-                            porientations[target1Ptoff] = newQ;
-                            porientations[target2Ptoff] = newU;
-                            break;
-                        }
-                        case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
-                            oCorrections[target1Ptoff] += qCorrection;
-                            oCorrections[target2Ptoff] += uCorrection;
-                            nOCorrections[target1Ptoff] += 1;
-                            nOCorrections[target2Ptoff] += 1;
-                            break;
-                        }
+                    case (SOP_ProjectConstraintsEnums::IterationType::JACOBI): {
+                        oCorrections[target1Ptoff] += correctionq;
+                        oCorrections[target2Ptoff] += correctionu;
+                        nOCorrections[target1Ptoff] += 1;
+                        nOCorrections[target2Ptoff] += 1;
+                        break;
                     }
                 }
             }
@@ -1087,6 +876,126 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     }
 
     return;
+}
+
+bool 
+SOP_ProjectConstraintsVerb::validateConstraint(const UT_Int32Array& targets, const UT_FloatArray& compliance, int nTargets,
+        bool doIgnoreStiffness, bool doXpbd, int nComponents, int constraint_idx, const CookParms &cookparms) const
+{
+    if (targets.size() < nTargets) {
+        char buffer[100];
+        snprintf(buffer, 100, "Constraint %i: failure (expected %i target, got %lli)", constraint_idx, nTargets, targets.size());
+        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+        return false;
+    }
+    else if (!doIgnoreStiffness && doXpbd && compliance.size() < nComponents) {
+        char buffer[100];
+        snprintf(buffer, 100, "Constraint %i: failure (expected %i compliance value, got %lli)", constraint_idx, nComponents, compliance.size());
+        cookparms.sopAddWarning(SOP_MESSAGE, buffer);
+        return false;
+    }
+    return true;
+}
+
+bool 
+SOP_ProjectConstraintsVerb::validateAttachmentConstraint(const CookParms &cookparms) const
+{
+    return true;
+}
+
+bool 
+SOP_ProjectConstraintsVerb::validateDistanceConstraint(
+    const GA_ROHandleD& distHandle, const GA_ROHandleD& invMassHandle, 
+    const std::string& dist_attr, const std::string& invMass_attr,
+    const CookParms &cookparms) const
+{
+    if (distHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "dist", "constraint", dist_attr, true);
+        return false;
+    }
+    else if (invMassHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr, true);
+        return false;
+    }
+    return true;
+}
+
+bool
+SOP_ProjectConstraintsVerb::validateCollisionConstraint(
+        const GA_ROHandleV3& hitPHandle, const GA_ROHandleV3& hitNHandle, const GA_RWHandleI& hasCollidedHandle,
+        const GA_ROHandleV3& collisionNormalHandle, const GA_ROHandleD& invMassHandle,
+        const std::string& hitP_attr, const std::string& hitN_attr, const std::string& collided_attr,
+        const std::string& cN_attr, const std::string& invMass_attr,
+        const CookParms &cookparms) const
+{
+    if (hitPHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "hitP", "constraint", hitP_attr, true);
+        return false;
+    }
+    else if (hitNHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "hitN", "constraint", hitN_attr, true);
+        return false;
+    }
+    else if (hasCollidedHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "has collided", "Sim geo", collided_attr, true);
+        return false;
+    }
+    else if (collisionNormalHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "collision normal", "Sim geo", cN_attr, true);
+        return false;
+    }
+    else if (invMassHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr, true);
+        return false;
+    }
+    return true;
+}
+
+bool 
+SOP_ProjectConstraintsVerb::validateStretchShearConstraint(
+    const GA_ROHandleD& invMassHandle, const GA_ROHandleD& oriInvMassHandle, const GA_ROHandleD& lengthHandle,
+    const std::string& invMass_attr, const std::string& ori_invMass_attr, const std::string& length_attr,
+    const CookParms &cookparms) const
+{
+    if (invMassHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "inv mass", "Sim geo", invMass_attr.c_str(), true);
+        return false;
+    }
+    else if (oriInvMassHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "orientation inv mass", "Sim geo", ori_invMass_attr.c_str(), true);
+        return false;
+    }
+    else if (lengthHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "length", "Sim geo", length_attr.c_str(), true);
+        return false;
+    }
+    return true;
+}
+
+bool
+SOP_ProjectConstraintsVerb::validateBendTwistConstraint(
+        const GA_ROHandleD& oriInvMassHandle, const GA_ROHandleD& lengthHandle, const GA_RWHandleV4& orientHandle,
+        const GA_ROHandleV3& restDarbouxHandle,
+        const std::string& ori_invMass_attr,  const std::string& orient_attr,  const std::string& length_attr,  const std::string& rest_darboux_attr,
+        const CookParms &cookparms) const
+{
+    if (oriInvMassHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "orientation inv mass", "sim geo", ori_invMass_attr.c_str(), true);
+        return false;
+    }
+    else if (orientHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "orientation", "sim geo", orient_attr.c_str(), true);
+        return false;
+    }
+    else if (lengthHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "length", "sim geo", length_attr.c_str(), true);
+        return false;
+    }
+    else if (restDarbouxHandle.isInvalid()) {
+        addInvalidHandleWarning(cookparms, "rest darboux", "sim geo", rest_darboux_attr.c_str(), true);
+        return false;
+    }
+    return true;
 }
 
 void 
