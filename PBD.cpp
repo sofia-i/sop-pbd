@@ -40,6 +40,8 @@
 #include "SOP_CreateRodConstraints.h"
 #include "SOP_Orientation.h"
 #include "SOP_RodIO.h"
+#include "SOP_IntegrateStep.h"
+#include "SOP_ApplyUpdates.h"
 
 void
 newSopOperator(OP_OperatorTable *table)
@@ -52,4 +54,6 @@ newSopOperator(OP_OperatorTable *table)
     table->addOperator(HDK_PBD::SOP_CreateRodConstraints::getOperator());
     table->addOperator(HDK_PBD::SOP_CalculateDarboux::getOperator());
     table->addOperator(HDK_PBD::SOP_ReadRod::getOperator());
+    table->addOperator(HDK_PBD::SOP_Integrate::getOperator());
+    table->addOperator(HDK_PBD::SOP_ApplyUpdates::getOperator());
 }
