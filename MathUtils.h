@@ -4,7 +4,7 @@
 
 #include <UT/UT_VectorTypes.h>
 
-namespace PBD {
+namespace HDK_PBD {
 class MathUtils {
 public:
     static UT_Vector3R quatImagPart(UT_Vector4R q);
@@ -30,6 +30,6 @@ public:
                                     float length);
     static UT_Vector3R strain(UT_Vector3R x1, UT_Vector3R x2, UT_Vector4R q, float length);
 };
-} // end namespace PBD
+} // end namespace HDK_PBD
 
 #endif

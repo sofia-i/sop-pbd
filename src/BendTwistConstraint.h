@@ -2,12 +2,12 @@
 #define __Bend_Twist_Constraint_h__
 
 #include "Constraint.h"
-#include "../MathUtils.h"
+#include "MathUtils.h"
 
 #include <UT/UT_Matrix3.h>
 #include <UT/UT_FloatArray.h>
 
-using qm = PBD::MathUtils;
+using qm = HDK_PBD::MathUtils;
 
 namespace HDK_PBD {
 

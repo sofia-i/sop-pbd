@@ -46,7 +46,7 @@
 using namespace UT::Literal;
 using namespace HDK_PBD;
 
-using qm = PBD::MathUtils;
+using qm = MathUtils;
 
 
 OP_Operator*

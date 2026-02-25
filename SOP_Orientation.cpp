@@ -127,7 +127,7 @@ SOP_CalculateDarboux::cookMySop(OP_Context &context)
             UT_Vector4 u = orientHandle.get(nextPtoff);
             float length = lengthHandle.get(ptoff);
                     
-            UT_Vector3 darboux = PBD::MathUtils::darbouxVector(q, u, length);
+            UT_Vector3 darboux = MathUtils::darbouxVector(q, u, length);
             darbouxHandle.set(ptoff, darboux);
         }
     }

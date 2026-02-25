@@ -10,7 +10,7 @@
  */
 #define SCALAR_LAST
 
-using namespace PBD;
+using namespace HDK_PBD;
 
 UT_Vector4R MathUtils::quatProd(UT_Vector4R p, UT_Vector4R q) 
 {
