@@ -57,3 +57,25 @@ include_directories(${PROJECT_SOURCE_DIR})
 
 # Sets several common target properties, such as the library's output directory.
 houdini_configure_target( ${library_name} )
+
+# Find Eigen path to include
+find_path(EIGEN_DIR NAMES signature_of_eigen3_matrix_library
+        PATHS
+        /opt/homebrew/Cellar/eigen
+#        /usr/local/include/eigen3
+        PATH_SUFFIXES eigen3 eigen)
+if(NOT EXISTS ${EIGEN_DIR})
+    message(FATAL_ERROR "Please check that the set Eigen directory is valid!")
+endif()
+include_directories(${EIGEN_DIR})
+include_directories(include)
+
+add_executable(sop_pbd_test
+    test/test.cpp
+    MathUtils.cpp
+    extern/intg-pbd/MathFunctions.cpp
+    extern/intg-pbd/PositionBasedElasticRods.cpp
+    extern/intg-pbd/TimeIntegration.cpp
+)
+
+target_link_libraries(sop_pbd_test Houdini)
