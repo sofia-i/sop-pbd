@@ -49,6 +49,7 @@ target_include_directories( ${library_name} PRIVATE
 )
 
 target_compile_options(${library_name} PRIVATE -g)
+include_directories(${PROJECT_SOURCE_DIR})
 
 # Sets several common target properties, such as the library's output directory.
 houdini_configure_target( ${library_name} )
