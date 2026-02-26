@@ -32,6 +32,7 @@ add_library( ${library_name} SHARED
     SOP_ProjectConstraints.cpp
     MathUtils.cpp
     PBD.cpp
+    src/Constraint.cpp
     SOP_CreateCollisionConstraints.cpp
     SOP_CreateAttachmentConstraints.cpp
     SOP_CreateDistanceConstraints.cpp
@@ -73,6 +74,7 @@ include_directories(include)
 add_executable(sop_pbd_test
     test/test.cpp
     MathUtils.cpp
+    src/Constraint.cpp
     extern/intg-pbd/MathFunctions.cpp
     extern/intg-pbd/PositionBasedElasticRods.cpp
     extern/intg-pbd/TimeIntegration.cpp

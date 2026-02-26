@@ -11,14 +11,7 @@ enum StiffnessMode {
     COMPLIANCE
 };
 
-StiffnessMode getStiffnessMode(bool doIgnoreStiffness, bool doXpbd) {
-    if (doIgnoreStiffness)
-        return NONE;
-    else if (doXpbd)
-        return COMPLIANCE;
-    else
-        return STIFFNESS;
-}
+StiffnessMode getStiffnessMode(bool doIgnoreStiffness, bool doXpbd);
 
 
 class Constraint {

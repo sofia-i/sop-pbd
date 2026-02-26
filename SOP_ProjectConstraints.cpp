@@ -28,6 +28,7 @@
 
 #include "SOP_ProjectConstraints.h"
 #include "MathUtils.h"
+#include "src/Constraint.h"
 #include "src/AttachmentConstraint.h"
 #include "src/BendTwistConstraint.h"
 #include "src/CollisionConstraint.h"
