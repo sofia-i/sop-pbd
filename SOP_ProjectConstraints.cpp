@@ -433,6 +433,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
     SOP_ProjectConstraintsEnums::IterationType iterType = sopparms.getIterationType();
     bool doXpbd = sopparms.getDoXpbd();
     bool doIgnoreStiffness = sopparms.getDoIgnoreStiffness();
+    StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
 
     // -- Validate constraint property handles -- //
     GA_ROHandleS type(constraints, GA_ATTRIB_POINT, type_attr);
@@ -617,17 +618,21 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
             UT_FloatArray compliance;
             float stiffness;
-            if (!doIgnoreStiffness) {
-                if (doXpbd) {
-                    complianceHandle.get(constraint_ptoff, compliance);
-                    for (int i = 0; i < compliance.size(); ++i) {
-                        // Incorporate timestep (XPBD!!)
-                        compliance[i] *= inv_time_squared;
-                    }
-                }
-                else {
+            switch (stiffMode) {
+                case STIFFNESS: {
                     stiffness = stiffnessHandle.get(constraint_ptoff);
+                    break;
                 }
+                case COMPLIANCE: {
+                    complianceHandle.get(constraint_ptoff, compliance);
+                    // Incorporate timestep (XPBD!!)
+                    for (int i = 0; i < compliance.size(); ++i)
+                        compliance[i] *= inv_time_squared;
+                    break;
+                }
+                case NONE:
+                default:
+                    break;
             }
 
             int nComponents = dimHandle.get(constraint_ptoff);
@@ -648,7 +653,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 UT_Vector3 propp = ppositions[targetPtoff];
 
                 UT_Vector3F correction;
-                AttachmentConstraint::solve(propp, location, compliance, doXpbd, correction, stiffness, nIterations);
+                AttachmentConstraint::solve(propp, location, stiffMode, compliance, stiffness, nIterations, correction);
 
                 // Apply constraint correction
                 switch (iterType) {
@@ -683,7 +688,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
                 UT_Vector3F correction1;
                 UT_Vector3F correction2;
-                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
                 
                 DistanceConstraint::solve(p1, p2, dist, w1, w2, stiffMode, stiffness, compliance, nIterations, correction1, correction2);
 
@@ -723,7 +727,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 float w = invMassHandle(targetPtoff);
 
                 UT_Vector3F correction;
-                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
                 CollisionConstraint::solve(hit_p, hit_n, propp, w, stiffMode, stiffness, compliance, nIterations, correction);
 
                 hasCollidedHandle.set(targetPtoff, 1);
@@ -772,7 +775,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
                 UT_Vector3F correction1, correction2;
                 UT_Vector4F correctionq;
-                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
                 StretchShearConstraint::solve(p1, p2, q, w1, w2, wq, length, stiffMode, stiffness, compliance, nIterations, correction1, correction2, correctionq);
 
                 switch (iterType) {
@@ -826,7 +828,6 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
 
 
                 UT_Vector4 correctionq, correctionu;
-                StiffnessMode stiffMode = getStiffnessMode(doIgnoreStiffness, doXpbd);
                 BendTwistConstraint::solve(q, u, wq, wu, length, rest_darboux, stiffMode, stiffness, nIterations, compliance, correctionq, correctionu);
 
                 switch (iterType) {
