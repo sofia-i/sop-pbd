@@ -73,6 +73,8 @@ include_directories(include)
 
 add_executable(sop_pbd_test
     test/test.cpp
+    test/compare_int_g.cpp
+    test/xpbd.cpp
     MathUtils.cpp
     src/Constraint.cpp
     extern/intg-pbd/MathFunctions.cpp

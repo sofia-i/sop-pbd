@@ -1,5 +1,5 @@
-#ifndef __Test_Helpers_h__
-#define __Test_Helpers_h__
+#ifndef __Int_G_Helpers_h__
+#define __Int_G_Helpers_h__
 
 #include <UT/UT_Vector3.h>
 #include <UT/UT_Vector4.h>
@@ -8,6 +8,7 @@
 #include "../extern/intg-pbd/PositionBasedElasticRods.h"
 #include "../extern/intg-pbd/TimeIntegration.h"
 
+#include "src/Constraint.h"
 
 namespace PBD_TEST {
 
@@ -120,6 +121,43 @@ bool get_intg_bt_correction(const UT_Vector4F& q, const UT_Vector4F& u,
     return result;
 }
 
+void get_intg_ang_vel_ori_integ(const UT_Vector3F& angVel, const UT_Vector3F& torque, const UT_Vector4F& orientation,
+    float oriInvMass, float timestep, UT_Vector3F& newAngVel, UT_Vector4F& newOrientation)
+{
+    // void TimeIntegration::semiImplicitEulerRotation(
+	// const Real h,
+	// const Real mass,
+	// const Matrix3r& invertiaW,
+	// const Matrix3r &invInertiaW,
+	// Quaternionr &rotation,
+	// Vector3r &angularVelocity,	
+	// const Vector3r &torque)
+    Real h = timestep;
+    Real mass = 1.;
+    Real oriMass = 1. / oriInvMass;
+    Matrix3r inertiaW {
+        {oriMass, 0., 0.},
+        {0., oriMass, 0.},
+        {0., 0., oriMass}
+    };
+    Matrix3r invInertiaW {
+        {oriInvMass, 0., 0.},
+        {0., oriInvMass, 0.},
+        {0., 0., oriInvMass}
+    };
+    Quaternionr rotation = getQuatr(orientation);
+    Vector3r angVelr = getVecr(angVel);
+    Vector3r torquer = getVecr(torque);
+
+    PBD::TimeIntegration::semiImplicitEulerRotation(
+        h, mass, inertiaW, invInertiaW,
+        rotation, angVelr, torquer
+    );
+
+    newAngVel = getVecUT(angVelr);
+    newOrientation = getQuatUT(rotation);
+}
+
 
 UT_Vector3F get_intg_ang_vel_update(const UT_Vector4F& orientation, const UT_Vector4F& proposedOrientation, float timestep)
 {
@@ -136,4 +174,4 @@ UT_Vector3F get_intg_ang_vel_update(const UT_Vector4F& orientation, const UT_Vec
 
 }  // end namespace PBD_TEST
 
-#endif  // __Test_Helpers_h__
+#endif  // __Int_G_Helpers_h__
