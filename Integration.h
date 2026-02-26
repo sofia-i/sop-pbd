@@ -25,7 +25,10 @@ inline UT_Vector3F integrateAngularVelocity(const UT_Vector3F& angVel, UT_Vector
 
 inline UT_Vector4F integrateOrientation(const UT_Vector4F& orient, UT_Vector3F& angVel, float timestep)
 {
-    UT_Vector4F newOrientation = orient + UT_Vector4F(qm::quatProd(orient, qm::quatEmbed(angVel)) * 0.5 * timestep);
+    // UT_Vector4F newOrientation = orient + UT_Vector4F(qm::quatProd(orient, qm::quatEmbed(angVel)) * 0.5 * timestep);
+
+    // Assume worldspace angular velocity
+    UT_Vector4F newOrientation = orient + 0.5 * timestep * UT_Vector4F(qm::quatProd(qm::quatEmbed(angVel), orient));
     newOrientation.normalize();
     return newOrientation;
 }
@@ -33,7 +36,9 @@ inline UT_Vector4F integrateOrientation(const UT_Vector4F& orient, UT_Vector3F& 
 inline UT_Vector3F getAngularVelocityUpdate(const UT_Vector4F& orientation, const UT_Vector4F& proposedOrientation,
                                            float timestep) 
 {
-    UT_Vector4F temp = (2. / timestep) * qm::quatProd(qm::quatConjugate(orientation), proposedOrientation);
+    // UT_Vector4F temp = (2. / timestep) * qm::quatProd(qm::quatConjugate(orientation), proposedOrientation);
+    // Assume worldspace angular velocity
+    UT_Vector4F temp = qm::quatProd(proposedOrientation, qm::quatConjugate(orientation)) * (2. / timestep);
     return {temp.x(), temp.y(), temp.z()};
 }
 
