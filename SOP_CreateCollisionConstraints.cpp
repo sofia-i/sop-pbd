@@ -319,7 +319,11 @@ void SOP_CreateCollisionConstraints::addCollConstraintFromHit(GU_Detail* out_geo
                                                               GU_RayInfo hitInfo, const std::string& source,
                                                               float stiffness, float compliance)
 {
-    UT_Vector3 hit_pos = start + hitInfo.myT * dir;
+    // NOTE: opted for evaluateInteriorPoint instead of using myT for more accurate results
+    const GEO_Primitive *hitPrim = hitInfo.myPrim;
+    UT_Vector4 pos;
+    hitPrim->evaluateInteriorPoint(pos, hitInfo.myU, hitInfo.myV);
+    UT_Vector3 hit_pos = {pos.x(), pos.y(), pos.z()};
     UT_Vector3 hit_n = hitInfo.myNml;
     addCollConstraint(out_geo, target, hit_pos, hit_n, source, stiffness, compliance);
 }
@@ -379,9 +383,11 @@ bool SOP_CreateCollisionConstraints::checkCollision(GU_RayIntersect *coll,
 
     int nHits = coll->sendRay(start, dir, hitInfo);
 
-    if (nHits > 0 && hitInfo.myT <= step_t) {
-       // std::cerr << "Found collision" << std::endl;
-        return true;
+    if (nHits > 0) {
+        double hitT = hitInfo.myT;
+        if (hitT <= step_t) {
+            return true;
+        }
     }
 
     return false;
