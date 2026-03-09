@@ -626,8 +626,7 @@ SOP_ProjectConstraintsVerb::cook(const CookParms &cookparms) const
                 case COMPLIANCE: {
                     complianceHandle.get(constraint_ptoff, compliance);
                     // Incorporate timestep (XPBD!!)
-                    for (int i = 0; i < compliance.size(); ++i)
-                        compliance[i] *= inv_time_squared;
+                    complianceApplyTimestep(compliance, timestep);
                     break;
                 }
                 case NONE:

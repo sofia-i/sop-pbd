@@ -14,6 +14,7 @@ const UT_Vector4F QUAT_C = {0.938315, -0.104257, 0.104257, 0.312772};
 
 const UT_Vector3F UNIT_VEC_A = {0.199007, 0.398015, 0.895533};
 const UT_Vector3F VEC_A = {0., -0.9, 0.};
+const UT_Vector3F VEC_B = {0., -0.8, 0.};
 
 }
 
