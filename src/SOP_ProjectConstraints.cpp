@@ -54,8 +54,8 @@ OP_Operator*
 SOP_ProjectConstraints::getOperator()
 {
     return new OP_Operator(
-        "hdk_project_constraints",
-        "Project Constraints",
+        "pbd_project_constraints",
+        "PBD Project Constraints",
         SOP_ProjectConstraints::myConstructor,
         SOP_ProjectConstraints::buildTemplates(),
         2,

@@ -1,5 +1,5 @@
-build/*
-logs/*
+build
+logs
 
 # IDE settings
 .vscode
