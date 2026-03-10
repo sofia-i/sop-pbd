@@ -3,9 +3,9 @@
 #include "IntGHelpers.h"
 #include "TestConstants.h"
 
-#include "../src/StretchShearConstraint.h"
-#include "../src/BendTwistConstraint.h"
-#include "../Integration.h"
+#include "Constraints/StretchShearConstraint.h"
+#include "Constraints/BendTwistConstraint.h"
+#include "Utility/Integration.h"
 
 using namespace PBD_TEST;
 

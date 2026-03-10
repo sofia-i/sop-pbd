@@ -8,7 +8,7 @@
 #include "../extern/intg-pbd/PositionBasedElasticRods.h"
 #include "../extern/intg-pbd/TimeIntegration.h"
 
-#include "src/Constraint.h"
+#include "Constraints/Constraint.h"
 
 namespace PBD_TEST {
 

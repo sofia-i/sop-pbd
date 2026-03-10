@@ -1,7 +1,7 @@
 
 #include "SOP_IntegrateStep.h"
-#include "MathUtils.h"
-#include "Integration.h"
+#include "Utility/MathUtils.h"
+#include "Utility/Integration.h"
 
 #include <OP/OP_Operator.h>
 #include <OP/OP_AutoLockInputs.h>

@@ -16,32 +16,32 @@ set( library_name SOP_PBD )
 
 # Code generation for the embedded DS file 
 houdini_generate_proto_headers( 
-    FILES   SOP_ProjectConstraints.cpp
-            SOP_CreateCollisionConstraints.cpp
-            SOP_CreateAttachmentConstraints.cpp
-            SOP_CreateDistanceConstraints.cpp
-            SOP_CreateRodConstraints.cpp
-            SOP_Orientation.cpp
-            SOP_RodIO.cpp
-            SOP_IntegrateStep.cpp
-            SOP_ApplyUpdates.cpp
+    FILES   src/SOP_ProjectConstraints.cpp
+            src/SOP_CreateCollisionConstraints.cpp
+            src/SOP_CreateAttachmentConstraints.cpp
+            src/SOP_CreateDistanceConstraints.cpp
+            src/SOP_CreateRodConstraints.cpp
+            src/SOP_Orientation.cpp
+            src/SOP_RodIO.cpp
+            src/SOP_IntegrateStep.cpp
+            src/SOP_ApplyUpdates.cpp
 )
 
 # Add a library and its source files.
 add_library( ${library_name} SHARED
-    SOP_ProjectConstraints.cpp
-    MathUtils.cpp
-    PBD.cpp
-    src/Constraint.cpp
-    SOP_CreateCollisionConstraints.cpp
-    SOP_CreateAttachmentConstraints.cpp
-    SOP_CreateDistanceConstraints.cpp
-    SOP_SolveVelocity.cpp
-    SOP_CreateRodConstraints.cpp
-    SOP_Orientation.cpp
-    SOP_RodIO.cpp
-    SOP_IntegrateStep.cpp
-    SOP_ApplyUpdates.cpp
+    src/SOP_ProjectConstraints.cpp
+    src/Utility/MathUtils.cpp
+    src/PBD.cpp
+    src/Constraints/Constraint.cpp
+    src/SOP_CreateCollisionConstraints.cpp
+    src/SOP_CreateAttachmentConstraints.cpp
+    src/SOP_CreateDistanceConstraints.cpp
+    src/SOP_SolveVelocity.cpp
+    src/SOP_CreateRodConstraints.cpp
+    src/SOP_Orientation.cpp
+    src/SOP_RodIO.cpp
+    src/SOP_IntegrateStep.cpp
+    src/SOP_ApplyUpdates.cpp
 )
 
 # Link against the Houdini libraries, and add required include directories and
@@ -54,7 +54,7 @@ target_include_directories( ${library_name} PRIVATE
 )
 
 target_compile_options(${library_name} PRIVATE -g)
-include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/src)
 
 # Sets several common target properties, such as the library's output directory.
 houdini_configure_target( ${library_name} )
@@ -75,8 +75,8 @@ add_executable(sop_pbd_test
     test/test.cpp
     test/compare_int_g.cpp
     test/xpbd.cpp
-    MathUtils.cpp
-    src/Constraint.cpp
+    src/Utility/MathUtils.cpp
+    src/Constraints/Constraint.cpp
     extern/intg-pbd/MathFunctions.cpp
     extern/intg-pbd/PositionBasedElasticRods.cpp
     extern/intg-pbd/TimeIntegration.cpp

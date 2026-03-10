@@ -4,9 +4,9 @@
 #include <iostream>
 
 #include "TestConstants.h"
-#include "src/Constraint.h"
-#include "src/AttachmentConstraint.h"
-#include "src/DistanceConstraint.h"
+#include "Constraints/Constraint.h"
+#include "Constraints/AttachmentConstraint.h"
+#include "Constraints/DistanceConstraint.h"
 
 using namespace PBD_TEST;
 

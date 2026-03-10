@@ -27,13 +27,13 @@
  */
 
 #include "SOP_ProjectConstraints.h"
-#include "MathUtils.h"
-#include "src/Constraint.h"
-#include "src/AttachmentConstraint.h"
-#include "src/BendTwistConstraint.h"
-#include "src/CollisionConstraint.h"
-#include "src/DistanceConstraint.h"
-#include "src/StretchShearConstraint.h"
+#include "Utility/MathUtils.h"
+#include "Constraints/Constraint.h"
+#include "Constraints/AttachmentConstraint.h"
+#include "Constraints/BendTwistConstraint.h"
+#include "Constraints/CollisionConstraint.h"
+#include "Constraints/DistanceConstraint.h"
+#include "Constraints/StretchShearConstraint.h"
 
 #include <GU/GU_Detail.h>
 #include <OP/OP_AutoLockInputs.h>

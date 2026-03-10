@@ -4,7 +4,7 @@
  */
 
 #include "SOP_Orientation.h"
-#include "MathUtils.h"
+#include "Utility/MathUtils.h"
 
 #include <OP/OP_Operator.h>
 #include <OP/OP_AutoLockInputs.h>
