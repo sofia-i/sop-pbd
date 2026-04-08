@@ -1,6 +1,6 @@
 # PBD for Houdini
 
-This project implements position-based dynamics in Houdini as custom SOP nodes written in C++. Please note that this is a work in progress.
+This project implements position-based dynamics in Houdini as custom SOP nodes written in C++. This is a work in progress, and will be updated periodically.
 
 ![](docs/images/hairsim.gif)
 
